@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       nom: article.nom,
       reference: article.reference,
       prixEffectif,
+      coutUnitaire: article.coutUnitaire,
       envoye: entree?.envoye ?? 0,
       vendu: entree?.vendu ?? 0,
       prixUnitaire: entree?.prixUnitaire ?? prixEffectif,

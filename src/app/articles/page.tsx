@@ -13,11 +13,18 @@ type Article = {
   reference: string | null;
   categorie: string | null;
   prixDefaut: number;
+  coutUnitaire: number;
   prix: Prix[];
 };
 type Boutique = { id: number; nom: string };
 
-const vide = { nom: "", reference: "", categorie: "", prixDefaut: "" };
+const vide = {
+  nom: "",
+  reference: "",
+  categorie: "",
+  prixDefaut: "",
+  coutUnitaire: "",
+};
 
 // Catégories proposées par défaut (complétées par celles déjà utilisées)
 const CATEGORIES_SUGGEREES = ["Print", "Lino", "Stickers"];
@@ -128,6 +135,7 @@ export default function ArticlesPage() {
       reference: a.reference ?? "",
       categorie: a.categorie ?? "",
       prixDefaut: String(a.prixDefaut),
+      coutUnitaire: a.coutUnitaire > 0 ? String(a.coutUnitaire) : "",
     });
     setOpen(true);
   }
@@ -141,6 +149,7 @@ export default function ArticlesPage() {
       reference: form.reference,
       categorie: form.categorie,
       prixDefaut: parseFloat(form.prixDefaut) || 0,
+      coutUnitaire: parseFloat(form.coutUnitaire) || 0,
     };
     if (edition) {
       await fetch(`/api/articles/${edition.id}`, {
@@ -215,7 +224,7 @@ export default function ArticlesPage() {
     <div>
       <PageHeader
         titre="Articles"
-        sousTitre="Vos produits et leurs prix (un prix par défaut, ajustable par boutique)."
+        sousTitre="Vos produits, leurs prix (un prix par défaut, ajustable par boutique) et leurs frais de fabrication."
         action={
           <button className="btn btn-primary" onClick={ouvrirAjout}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -273,6 +282,8 @@ export default function ArticlesPage() {
                   <th>Catégorie</th>
                   <th>Référence</th>
                   <th className="text-right">Prix par défaut</th>
+                  <th className="text-right">Frais / unité</th>
+                  <th className="text-right">Marge / unité</th>
                   <th>Prix spécifiques</th>
                   <th></th>
                 </tr>
@@ -293,6 +304,16 @@ export default function ArticlesPage() {
                     </td>
                     <td className="text-right font-semibold tabular-nums">
                       {formatMontant(a.prixDefaut)}
+                    </td>
+                    <td className="text-right tabular-nums text-[var(--muted)]">
+                      {a.coutUnitaire > 0
+                        ? `− ${formatMontant(a.coutUnitaire)}`
+                        : "—"}
+                    </td>
+                    <td
+                      className={`text-right font-semibold tabular-nums ${a.prixDefaut - a.coutUnitaire < 0 ? "text-[var(--danger)]" : ""}`}
+                    >
+                      {formatMontant(a.prixDefaut - a.coutUnitaire)}
                     </td>
                     <td>
                       {a.prix.length > 0 ? (
@@ -452,6 +473,26 @@ export default function ArticlesPage() {
               }
               placeholder="0.00"
             />
+          </div>
+          <div>
+            <label className="label">Frais de fabrication par unité (€)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.coutUnitaire}
+              onChange={(e) =>
+                setForm({ ...form, coutUnitaire: e.target.value })
+              }
+              placeholder="0.00"
+            />
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Achat de matériel pour fabriquer une pièce. Déduit du CA pour
+              chaque article vendu.
+              {form.coutUnitaire !== "" &&
+                ` Marge : ${formatMontant((parseFloat(form.prixDefaut) || 0) - (parseFloat(form.coutUnitaire) || 0))} / unité.`}
+            </p>
           </div>
           <div className="flex gap-2 justify-end pt-2">
             <button

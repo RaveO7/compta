@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { lireFrais } from "@/lib/frais";
 
 export async function PATCH(
   request: Request,
@@ -12,6 +13,16 @@ export async function PATCH(
   if ("reference" in body) data.reference = body.reference?.trim() || null;
   if ("categorie" in body) data.categorie = body.categorie?.trim() || null;
   if ("prixDefaut" in body) data.prixDefaut = Number(body.prixDefaut) || 0;
+  if ("coutUnitaire" in body) {
+    const cout = lireFrais(body.coutUnitaire);
+    if (cout === null) {
+      return NextResponse.json(
+        { error: "Le coût de fabrication doit être un montant positif." },
+        { status: 400 },
+      );
+    }
+    data.coutUnitaire = cout;
+  }
 
   const article = await prisma.article.update({
     where: { id: Number(id) },

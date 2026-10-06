@@ -94,13 +94,16 @@ export default async function DashboardPage({
   const parMoisMap = new Map<string, { ca: number; vendu: number; envoye: number }>();
   const parBoutiqueMap = new Map<
     string,
-    { ca: number; vendu: number; frais: number }
+    { ca: number; vendu: number; frais: number; materiel: number }
   >();
   // Frais boutiques : commission sur chaque vente + loyer pour chaque mois où
   // la boutique a un suivi saisi. Avec un filtre de catégorie, le loyer (non
   // rattachable à une catégorie) n'est pas compté.
   let fraisTotal = 0;
   let fraisMois = 0;
+  // Frais de fabrication (achat de matériel) des articles vendus
+  let materielTotal = 0;
+  let materielMois = 0;
   const moisAvecLoyer = new Set<string>();
   const parCategorieMap = new Map<string, { ca: number; vendu: number }>();
   const parArticleMap = new Map<
@@ -118,6 +121,9 @@ export default async function DashboardPage({
     }
     fraisTotal += frais;
     if (e.mois === moisCourant) fraisMois += frais;
+    const materiel = e.vendu * e.article.coutUnitaire;
+    materielTotal += materiel;
+    if (e.mois === moisCourant) materielMois += materiel;
     caTotal += ca;
     venduTotal += e.vendu;
     envoyeTotal += e.envoye;
@@ -138,10 +144,12 @@ export default async function DashboardPage({
       ca: 0,
       vendu: 0,
       frais: 0,
+      materiel: 0,
     };
     pb.ca += ca;
     pb.vendu += e.vendu;
     pb.frais += frais;
+    pb.materiel += materiel;
     parBoutiqueMap.set(e.boutique.nom, pb);
 
     const nomCategorie = e.article.categorie ?? "Sans catégorie";
@@ -194,6 +202,7 @@ export default async function DashboardPage({
     envoyeTotal > 0 ? Math.round((venduTotal / envoyeTotal) * 100) : 0;
 
   const aucuneDonnee = entrees.length === 0;
+  const aDesCharges = fraisTotal > 0 || materielTotal > 0;
 
   const filtres = [
     { valeur: null, libelle: "Toutes" },
@@ -266,7 +275,7 @@ export default async function DashboardPage({
         />
       </div>
 
-      {fraisTotal > 0 && (
+      {aDesCharges && (
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
           <StatCard
             titre="Frais boutiques"
@@ -274,18 +283,20 @@ export default async function DashboardPage({
             sousTitre={categorie ? "Commissions (hors loyers)" : "Loyers + commissions"}
           />
           <StatCard
+            titre="Frais matériel"
+            valeur={`− ${formatMontant(materielTotal)}`}
+            sousTitre="Fabrication des articles vendus"
+          />
+          <StatCard
             titre="Net total"
-            valeur={formatMontant(caTotal - fraisTotal)}
-            sousTitre="CA − frais boutiques"
+            valeur={formatMontant(caTotal - fraisTotal - materielTotal)}
+            sousTitre="CA − frais boutiques − matériel"
             accent
           />
           <StatCard
-            titre={`Frais ${formatMois(moisCourant)}`}
-            valeur={`− ${formatMontant(fraisMois)}`}
-          />
-          <StatCard
             titre={`Net ${formatMois(moisCourant)}`}
-            valeur={formatMontant(caMois - fraisMois)}
+            valeur={formatMontant(caMois - fraisMois - materielMois)}
+            sousTitre={`Frais : − ${formatMontant(fraisMois + materielMois)}`}
           />
         </div>
       )}
@@ -435,7 +446,7 @@ export default async function DashboardPage({
                       <th>Boutique</th>
                       <th className="text-center">Vendus</th>
                       <th className="text-right">CA</th>
-                      {fraisTotal > 0 && (
+                      {aDesCharges && (
                         <>
                           <th className="text-right">Frais</th>
                           <th className="text-right">Net</th>
@@ -451,13 +462,18 @@ export default async function DashboardPage({
                         <td className="text-right font-semibold tabular-nums">
                           {formatMontant(b.ca)}
                         </td>
-                        {fraisTotal > 0 && (
+                        {aDesCharges && (
                           <>
-                            <td className="text-right tabular-nums text-[var(--muted)]">
-                              {b.frais > 0 ? `− ${formatMontant(b.frais)}` : "—"}
+                            <td
+                              className="text-right tabular-nums text-[var(--muted)]"
+                              title={`Boutique : ${formatMontant(b.frais)} · Matériel : ${formatMontant(b.materiel)}`}
+                            >
+                              {b.frais + b.materiel > 0
+                                ? `− ${formatMontant(b.frais + b.materiel)}`
+                                : "—"}
                             </td>
                             <td className="text-right font-semibold tabular-nums">
-                              {formatMontant(b.ca - b.frais)}
+                              {formatMontant(b.ca - b.frais - b.materiel)}
                             </td>
                           </>
                         )}

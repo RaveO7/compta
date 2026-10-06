@@ -19,6 +19,7 @@ type Ligne = {
   nom: string;
   reference: string | null;
   prixEffectif: number;
+  coutUnitaire: number;
   envoye: number;
   vendu: number;
   prixUnitaire: number;
@@ -313,7 +314,9 @@ export default function SuiviPage() {
   const loyer = boutique?.loyerMensuel ?? 0;
   const commission = boutique ? montantCommission(totalCA, boutique) : 0;
   const totalFrais = loyer + commission;
-  const net = totalCA - totalFrais;
+  // Frais de fabrication (matériel) des articles vendus ce mois-ci
+  const totalMateriel = lignes.reduce((s, l) => s + l.vendu * l.coutUnitaire, 0);
+  const net = totalCA - totalFrais - totalMateriel;
 
   if (boutiques.length === 0 && !chargement) {
     return (
@@ -402,7 +405,7 @@ export default function SuiviPage() {
       </div>
 
       {/* Cartes de totaux */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
         <div className="card p-4">
           <p className="text-xs text-[var(--muted)] font-medium uppercase">
             Envoyé
@@ -447,6 +450,19 @@ export default function SuiviPage() {
         </div>
         <div className="card p-4">
           <p className="text-xs text-[var(--muted)] font-medium uppercase">
+            Frais matériel
+          </p>
+          <p className="text-2xl font-bold tabular-nums mt-1">
+            {totalMateriel > 0
+              ? `− ${formatMontant(totalMateriel)}`
+              : formatMontant(0)}
+          </p>
+          <p className="text-xs text-[var(--muted)] mt-1">
+            Fabrication des vendus
+          </p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs text-[var(--muted)] font-medium uppercase">
             Net
           </p>
           <p
@@ -454,7 +470,9 @@ export default function SuiviPage() {
           >
             {formatMontant(net)}
           </p>
-          <p className="text-xs text-[var(--muted)] mt-1">CA − frais</p>
+          <p className="text-xs text-[var(--muted)] mt-1">
+            CA − frais boutique − matériel
+          </p>
         </div>
       </div>
 
