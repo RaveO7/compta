@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ma Compta — Suivi des ventes & envois par boutique
 
-## Getting Started
+Application web (Next.js) pour gérer la comptabilité de vos ventes d'articles
+auprès de différentes boutiques : suivi des envois et des ventes mois par mois,
+prix différents selon la boutique, et vue d'ensemble avec graphiques.
 
-First, run the development server:
+## Fonctionnalités
+
+- **Vue d'ensemble** : CA total, CA du mois, graphique du chiffre d'affaires sur
+  12 mois, répartition par boutique, top articles.
+- **Suivi mensuel** : pour une boutique et un mois donnés, saisie rapide des
+  quantités **envoyées** et **vendues**, calcul automatique du chiffre d'affaires
+  et des invendus.
+- **Boutiques** : ajout / modification / suppression.
+- **Articles** : ajout / modification, prix par défaut **et prix spécifique par
+  boutique**.
+
+## Stack technique
+
+- [Next.js 16](https://nextjs.org/) (App Router) + TypeScript
+- Tailwind CSS v4
+- Prisma 7 + SQLite (base de données locale dans un fichier `dev.db`)
+- Recharts (graphiques)
+
+## Démarrage
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # installe les dépendances
+npm run db:migrate   # crée / met à jour la base de données
+npm run db:seed      # (optionnel) ajoute des données de démonstration
+npm run dev          # lance le site sur http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts utiles
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Commande            | Description                                   |
+| ------------------- | --------------------------------------------- |
+| `npm run dev`       | Serveur de développement                      |
+| `npm run build`     | Build de production                           |
+| `npm run start`     | Lance le build de production                  |
+| `npm run db:seed`   | Remplit la base avec des données d'exemple    |
+| `npm run db:studio` | Ouvre Prisma Studio (explorateur de la base)  |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Données
 
-## Learn More
+Toutes les données sont stockées **en local** dans le fichier `dev.db`
+(SQLite). Pensez à le sauvegarder régulièrement. Le modèle de données :
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Boutique** — un point de vente.
+- **Article** — un produit, avec un prix par défaut.
+- **Prix** — un prix spécifique d'un article pour une boutique donnée.
+- **Entree** — le suivi d'un article, pour une boutique, sur un mois
+  (quantité envoyée, quantité vendue, prix unitaire appliqué).
