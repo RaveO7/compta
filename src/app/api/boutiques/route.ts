@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+// Par défaut : boutiques actives uniquement. `?toutes=1` inclut les archivées.
+export async function GET(request: Request) {
+  const toutes = new URL(request.url).searchParams.get("toutes") === "1";
   const boutiques = await prisma.boutique.findMany({
-    orderBy: { nom: "asc" },
+    where: toutes ? undefined : { archivee: false },
+    orderBy: [{ archivee: "asc" }, { nom: "asc" }],
   });
   return NextResponse.json(boutiques);
 }

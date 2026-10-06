@@ -11,6 +11,7 @@ type Boutique = {
   contact: string | null;
   adresse: string | null;
   notes: string | null;
+  archivee: boolean;
 };
 
 const vide = { nom: "", contact: "", adresse: "", notes: "" };
@@ -25,7 +26,7 @@ export default function BoutiquesPage() {
 
   async function charger() {
     setChargement(true);
-    const res = await fetch("/api/boutiques");
+    const res = await fetch("/api/boutiques?toutes=1");
     setBoutiques(await res.json());
     setChargement(false);
   }
@@ -73,15 +74,96 @@ export default function BoutiquesPage() {
     await charger();
   }
 
+  async function archiver(b: Boutique, archivee: boolean) {
+    if (
+      archivee &&
+      !confirm(
+        `Archiver la boutique « ${b.nom} » ? Elle n'apparaîtra plus dans le suivi mensuel, mais son historique (envois, ventes, CA) est conservé. Vous pourrez la réactiver à tout moment.`,
+      )
+    )
+      return;
+    await fetch(`/api/boutiques/${b.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archivee }),
+    });
+    await charger();
+  }
+
   async function supprimer(b: Boutique) {
     if (
       !confirm(
-        `Supprimer la boutique « ${b.nom} » ? Tout son suivi mensuel sera également supprimé.`,
+        `Supprimer la boutique « ${b.nom} » ? Tout son suivi mensuel (envois, ventes, CA) sera définitivement supprimé.
+
+Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver ».`,
       )
     )
       return;
     await fetch(`/api/boutiques/${b.id}`, { method: "DELETE" });
     await charger();
+  }
+
+  const actives = boutiques.filter((b) => !b.archivee);
+  const archivees = boutiques.filter((b) => b.archivee);
+
+  function carte(b: Boutique) {
+    return (
+      <div
+        key={b.id}
+        className={`card p-5 flex flex-col gap-3 ${b.archivee ? "opacity-60" : ""}`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)] font-bold uppercase">
+              {b.nom.slice(0, 2)}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{b.nom}</p>
+              {b.contact && (
+                <p className="text-sm text-[var(--muted)] truncate">
+                  {b.contact}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {b.adresse && (
+          <p className="text-sm text-[var(--muted)]">{b.adresse}</p>
+        )}
+        {b.notes && (
+          <p className="text-sm bg-[var(--surface-2)] rounded-lg p-2 text-[var(--foreground)]">
+            {b.notes}
+          </p>
+        )}
+
+        <div className="flex gap-2 mt-auto pt-2">
+          <button
+            className="btn btn-secondary btn-sm flex-1"
+            onClick={() => ouvrirEdition(b)}
+          >
+            Modifier
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => archiver(b, !b.archivee)}
+            title={
+              b.archivee
+                ? "Remettre la boutique dans le suivi mensuel"
+                : "Retirer la boutique du suivi mensuel sans perdre son historique"
+            }
+          >
+            {b.archivee ? "Réactiver" : "Archiver"}
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => supprimer(b)}
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -99,7 +181,7 @@ export default function BoutiquesPage() {
 
       {chargement ? (
         <p className="text-[var(--muted)]">Chargement…</p>
-      ) : boutiques.length === 0 ? (
+      ) : actives.length === 0 && archivees.length === 0 ? (
         <EmptyState
           titre="Aucune boutique"
           description="Ajoutez votre première boutique pour commencer le suivi."
@@ -110,51 +192,30 @@ export default function BoutiquesPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {boutiques.map((b) => (
-            <div key={b.id} className="card p-5 flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)] font-bold uppercase">
-                    {b.nom.slice(0, 2)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{b.nom}</p>
-                    {b.contact && (
-                      <p className="text-sm text-[var(--muted)] truncate">
-                        {b.contact}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {b.adresse && (
-                <p className="text-sm text-[var(--muted)]">{b.adresse}</p>
-              )}
-              {b.notes && (
-                <p className="text-sm bg-[var(--surface-2)] rounded-lg p-2 text-[var(--foreground)]">
-                  {b.notes}
-                </p>
-              )}
-
-              <div className="flex gap-2 mt-auto pt-2">
-                <button
-                  className="btn btn-secondary btn-sm flex-1"
-                  onClick={() => ouvrirEdition(b)}
-                >
-                  Modifier
-                </button>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => supprimer(b)}
-                >
-                  Supprimer
-                </button>
-              </div>
+        <>
+          {actives.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {actives.map(carte)}
             </div>
-          ))}
-        </div>
+          ) : (
+            <p className="text-[var(--muted)]">Aucune boutique active.</p>
+          )}
+
+          {archivees.length > 0 && (
+            <details className="mt-8">
+              <summary className="cursor-pointer font-semibold mb-1">
+                Boutiques archivées ({archivees.length})
+              </summary>
+              <p className="text-sm text-[var(--muted)] mb-4">
+                Plus proposées dans le suivi mensuel. Leur historique reste
+                comptabilisé dans le tableau de bord et le stock.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {archivees.map(carte)}
+              </div>
+            </details>
+          )}
+        </>
       )}
 
       <Modal

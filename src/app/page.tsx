@@ -64,7 +64,7 @@ export default async function DashboardPage({
         where: { article: filtreArticle },
         include: { boutique: true, article: true },
       }),
-      prisma.boutique.count(),
+      prisma.boutique.count({ where: { archivee: false } }),
       prisma.article.count({ where: filtreArticle }),
       prisma.article.findMany({
         where: { categorie: { not: null } },

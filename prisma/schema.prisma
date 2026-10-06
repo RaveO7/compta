@@ -16,6 +16,8 @@ model Boutique {
   contact   String?
   adresse   String?
   notes     String?
+  // Boutique fermée / plus active : masquée du suivi mensuel, historique conservé
+  archivee  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

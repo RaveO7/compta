@@ -12,6 +12,7 @@ export async function PATCH(
   if ("contact" in body) data.contact = body.contact?.trim() || null;
   if ("adresse" in body) data.adresse = body.adresse?.trim() || null;
   if ("notes" in body) data.notes = body.notes?.trim() || null;
+  if (typeof body.archivee === "boolean") data.archivee = body.archivee;
 
   const boutique = await prisma.boutique.update({
     where: { id: Number(id) },

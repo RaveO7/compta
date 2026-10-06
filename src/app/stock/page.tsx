@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import OptionsBoutiques from "@/components/OptionsBoutiques";
 import { formatMontant, formatMoisCourt } from "@/lib/format";
 
-type Boutique = { id: number; nom: string };
+type Boutique = { id: number; nom: string; archivee: boolean };
 type Cellule = { envoye: number; vendu: number };
 type Ligne = {
   articleId: number;
@@ -55,7 +56,7 @@ export default function StockPage() {
   const [afficherMois, setAfficherMois] = useState(true);
 
   useEffect(() => {
-    fetch("/api/boutiques")
+    fetch("/api/boutiques?toutes=1")
       .then((r) => r.json())
       .then((b: Boutique[]) => setBoutiques(b));
     fetch("/api/stock/matrice")
@@ -99,11 +100,7 @@ export default function StockPage() {
             onChange={(e) => setBoutiqueId(e.target.value)}
           >
             <option value="">Toutes les boutiques (cumulé)</option>
-            {boutiques.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nom}
-              </option>
-            ))}
+            <OptionsBoutiques boutiques={boutiques} />
           </select>
         </div>
         <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none pb-2">
@@ -184,6 +181,11 @@ export default function StockPage() {
                           className="text-center border-l border-[var(--border)]"
                         >
                           {b.nom}
+                          {b.archivee && (
+                            <span className="block text-xs font-normal text-[var(--muted)]">
+                              archivée
+                            </span>
+                          )}
                         </th>
                       ))}
                       <th className="text-center border-l-2 border-[var(--primary)]">

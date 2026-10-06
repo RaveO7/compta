@@ -40,7 +40,7 @@ export async function GET() {
   const lignes = [...map.values()].sort((a, b) => a.nom.localeCompare(b.nom));
 
   // Totaux de reste par boutique (pied de tableau)
-  const totauxParBoutique: Record<number, number> = {};
+  let totauxParBoutique: Record<number, number> = {};
   for (const b of boutiques) totauxParBoutique[b.id] = 0;
   let totalGeneral = 0;
   for (const l of lignes) {
@@ -50,8 +50,20 @@ export async function GET() {
     totalGeneral += l.total;
   }
 
+  // Les boutiques archivées n'apparaissent que s'il y reste du stock
+  const visibles = boutiques.filter(
+    (b) => !b.archivee || totauxParBoutique[b.id] !== 0,
+  );
+  totauxParBoutique = Object.fromEntries(
+    visibles.map((b) => [b.id, totauxParBoutique[b.id]]),
+  );
+
   return NextResponse.json({
-    boutiques: boutiques.map((b) => ({ id: b.id, nom: b.nom })),
+    boutiques: visibles.map((b) => ({
+      id: b.id,
+      nom: b.nom,
+      archivee: b.archivee,
+    })),
     lignes,
     totauxParBoutique,
     totalGeneral,

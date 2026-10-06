@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import OptionsBoutiques from "@/components/OptionsBoutiques";
 import { formatMontant, formatMois, moisActuel } from "@/lib/format";
 
-type Boutique = { id: number; nom: string };
+type Boutique = { id: number; nom: string; archivee: boolean };
 type Ligne = {
   articleId: number;
   nom: string;
@@ -108,11 +109,13 @@ export default function SuiviPage() {
   const relancerRef = useRef(false);
 
   useEffect(() => {
-    fetch("/api/boutiques")
+    // Toutes les boutiques (archivées incluses, pour consulter l'historique),
+    // mais on démarre sur une boutique active.
+    fetch("/api/boutiques?toutes=1")
       .then((r) => r.json())
       .then((b: Boutique[]) => {
         setBoutiques(b);
-        if (b.length > 0) setBoutiqueId(b[0].id);
+        if (b.length > 0) setBoutiqueId((b.find((x) => !x.archivee) ?? b[0]).id);
         else setChargement(false);
       });
   }, []);
@@ -336,11 +339,7 @@ export default function SuiviPage() {
               changerSelection(() => setBoutiqueId(id));
             }}
           >
-            {boutiques.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nom}
-              </option>
-            ))}
+            <OptionsBoutiques boutiques={boutiques} />
           </select>
         </div>
 
@@ -417,6 +416,8 @@ export default function SuiviPage() {
       <p className="text-sm text-[var(--muted)] mb-3">
         {formatMois(mois)} —{" "}
         {boutiques.find((b) => b.id === boutiqueId)?.nom}
+        {boutiques.find((b) => b.id === boutiqueId)?.archivee &&
+          " (boutique archivée)"}
       </p>
 
       {chargement ? (
