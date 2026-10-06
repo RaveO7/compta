@@ -31,16 +31,81 @@ function moisSuivant(mois: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type EtatSauvegarde = "enregistre" | "attente" | "enCours" | "erreur";
+type Selection = { boutiqueId: number; mois: string };
+
+function StatutSauvegarde({
+  etat,
+  nbEnAttente,
+  derniereSauvegarde,
+}: {
+  etat: EtatSauvegarde;
+  nbEnAttente: number;
+  derniereSauvegarde: Date | null;
+}) {
+  const pluriel = nbEnAttente > 1 ? "s" : "";
+  const heure = derniereSauvegarde?.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (etat === "enCours") {
+    return (
+      <span className="badge badge-muted inline-flex items-center gap-1.5">
+        <span className="inline-block h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        Enregistrement…
+      </span>
+    );
+  }
+  if (etat === "erreur") {
+    return (
+      <span className="badge badge-danger">
+        ✕ {nbEnAttente} modif. non enregistrée{pluriel}
+      </span>
+    );
+  }
+  if (etat === "attente") {
+    return (
+      <span className="badge badge-warning">
+        ● {nbEnAttente} modif. en attente
+      </span>
+    );
+  }
+  return (
+    <span className="badge badge-success">
+      ✓ Tout est enregistré{heure ? ` (${heure})` : ""}
+    </span>
+  );
+}
+
+// Délai après la dernière frappe avant l'enregistrement automatique
+const DELAI_AUTO = 800;
+
 export default function SuiviPage() {
   const [boutiques, setBoutiques] = useState<Boutique[]>([]);
   const [boutiqueId, setBoutiqueId] = useState<number | null>(null);
   const [mois, setMois] = useState(moisActuel());
   const [lignes, setLignes] = useState<Ligne[]>([]);
-  const [dirty, setDirty] = useState<Set<number>>(new Set());
   const [chargement, setChargement] = useState(true);
-  const [enregistrement, setEnregistrement] = useState(false);
-  const [message, setMessage] = useState("");
-  const [erreur, setErreur] = useState("");
+  // Articles dont la saisie n'est pas encore enregistrée (pour l'affichage)
+  const [enAttente, setEnAttente] = useState<Set<number>>(new Set());
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState(false);
+  const [derniereSauvegarde, setDerniereSauvegarde] = useState<Date | null>(
+    null,
+  );
+
+  // Lignes affichées + la boutique/le mois auxquels elles appartiennent :
+  // un enregistrement part toujours vers le mois des lignes, jamais vers un
+  // autre mois sélectionné entre-temps.
+  const lignesRef = useRef<Ligne[]>([]);
+  const selectionLignesRef = useRef<Selection | null>(null);
+  // articleId -> version de la modification non enregistrée
+  const modifsRef = useRef<Map<number, number>>(new Map());
+  const versionRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sauvegardeRef = useRef<Promise<void> | null>(null);
+  const relancerRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/boutiques")
@@ -70,12 +135,16 @@ export default function SuiviPage() {
       `/api/entrees?mois=${mois}&boutiqueId=${boutiqueId}`,
       { cache: "no-store" },
     );
-    const data = await res.json();
+    const data: Ligne[] = await res.json();
     if (requete !== requeteRef.current || selection !== selectionRef.current) {
       return;
     }
+    lignesRef.current = data;
+    selectionLignesRef.current = { boutiqueId, mois };
+    modifsRef.current = new Map();
     setLignes(data);
-    setDirty(new Set());
+    setEnAttente(new Set());
+    setErreur(false);
     setChargement(false);
   }, [boutiqueId, mois]);
 
@@ -83,64 +152,145 @@ export default function SuiviPage() {
     if (boutiqueId) chargerLignes();
   }, [boutiqueId, mois, chargerLignes]);
 
-  // Changer de boutique / de mois sans perdre de saisie par inadvertance
-  function changerSelection(action: () => void) {
+  // Enregistre toutes les modifications en attente. Si un enregistrement est
+  // déjà en cours, on relance juste après pour les saisies arrivées entre-temps.
+  const sauvegarder = useCallback((): Promise<void> => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (sauvegardeRef.current) {
+      relancerRef.current = true;
+      return sauvegardeRef.current;
+    }
+    const selection = selectionLignesRef.current;
+    if (!selection || modifsRef.current.size === 0) return Promise.resolve();
+
+    const executer = async () => {
+      setEnCours(true);
+      let echec = false;
+      do {
+        relancerRef.current = false;
+        const versions = new Map(modifsRef.current);
+        const aEnregistrer = lignesRef.current.filter((l) =>
+          versions.has(l.articleId),
+        );
+        const resultats = await Promise.all(
+          aEnregistrer.map((l) =>
+            fetch("/api/entrees", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              // keepalive : la requête aboutit même si la page se ferme
+              keepalive: true,
+              body: JSON.stringify({
+                boutiqueId: selection.boutiqueId,
+                articleId: l.articleId,
+                mois: selection.mois,
+                envoye: l.envoye,
+                vendu: l.vendu,
+                prixUnitaire: l.prixUnitaire,
+              }),
+            })
+              .then((r) => r.ok)
+              .catch(() => false),
+          ),
+        );
+        echec = false;
+        aEnregistrer.forEach((l, i) => {
+          if (!resultats[i]) {
+            echec = true;
+            return;
+          }
+          // Retirée de l'attente seulement si elle n'a pas été re-modifiée pendant l'envoi
+          if (modifsRef.current.get(l.articleId) === versions.get(l.articleId)) {
+            modifsRef.current.delete(l.articleId);
+          }
+        });
+        setEnAttente(new Set(modifsRef.current.keys()));
+      } while (!echec && relancerRef.current && modifsRef.current.size > 0);
+
+      setErreur(echec);
+      if (!echec) setDerniereSauvegarde(new Date());
+      setEnCours(false);
+      sauvegardeRef.current = null;
+    };
+
+    sauvegardeRef.current = executer();
+    return sauvegardeRef.current;
+  }, []);
+
+  function maj(articleId: number, champ: keyof Ligne, valeur: number) {
+    const suivantes = lignesRef.current.map((l) =>
+      l.articleId === articleId ? { ...l, [champ]: valeur } : l,
+    );
+    lignesRef.current = suivantes;
+    setLignes(suivantes);
+    modifsRef.current.set(articleId, ++versionRef.current);
+    setEnAttente(new Set(modifsRef.current.keys()));
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      sauvegarder();
+    }, DELAI_AUTO);
+  }
+
+  const aDesModifs = enAttente.size > 0 || enCours;
+
+  // Fermeture / rechargement de l'onglet avec des modifications non
+  // enregistrées : on lance l'enregistrement et le navigateur avertit.
+  useEffect(() => {
+    if (!aDesModifs) return;
+    const avantFermeture = (e: BeforeUnloadEvent) => {
+      sauvegarder();
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avantFermeture);
+    return () => window.removeEventListener("beforeunload", avantFermeture);
+  }, [aDesModifs, sauvegarder]);
+
+  // Clic sur un lien (menu…) avec des modifications pas encore enregistrées :
+  // on enregistre tout de suite et on demande confirmation avant de partir.
+  useEffect(() => {
+    if (!aDesModifs) return;
+    const surClic = (e: MouseEvent) => {
+      const lien = (e.target as Element | null)?.closest?.("a[href]");
+      if (!lien) return;
+      sauvegarder();
+      if (
+        !window.confirm(
+          "Vos dernières modifications ne sont pas encore enregistrées.\n\nQuitter la page maintenant risque de les perdre. Quitter quand même ?",
+        )
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", surClic, true);
+    return () => document.removeEventListener("click", surClic, true);
+  }, [aDesModifs, sauvegarder]);
+
+  // Changer de boutique / de mois : on enregistre d'abord la saisie en cours
+  async function changerSelection(action: () => void) {
+    await sauvegarder();
     if (
-      dirty.size > 0 &&
+      modifsRef.current.size > 0 &&
       !window.confirm(
-        "Des modifications ne sont pas enregistrées et seront perdues. Continuer ?",
+        "Certaines modifications n'ont pas pu être enregistrées et seront perdues. Continuer ?",
       )
     ) {
       return;
     }
-    setMessage("");
     action();
   }
 
-  function maj(articleId: number, champ: keyof Ligne, valeur: number) {
-    setLignes((prev) =>
-      prev.map((l) =>
-        l.articleId === articleId ? { ...l, [champ]: valeur } : l,
-      ),
-    );
-    setDirty((prev) => new Set(prev).add(articleId));
-    setMessage("");
-  }
-
-  async function enregistrer() {
-    if (!boutiqueId || dirty.size === 0) return;
-    setEnregistrement(true);
-    setMessage("");
-    const aEnregistrer = lignes.filter((l) => dirty.has(l.articleId));
-    const reponses = await Promise.all(
-      aEnregistrer.map((l) =>
-        fetch("/api/entrees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            boutiqueId,
-            articleId: l.articleId,
-            mois,
-            envoye: l.envoye,
-            vendu: l.vendu,
-            prixUnitaire: l.prixUnitaire,
-          }),
-        }).catch(() => null),
-      ),
-    );
-    setEnregistrement(false);
-    const echecs = reponses.filter((r) => !r || !r.ok).length;
-    if (echecs > 0) {
-      // On garde la saisie à l'écran pour pouvoir réessayer
-      setErreur(
-        `${echecs} ligne${echecs > 1 ? "s" : ""} non enregistrée${echecs > 1 ? "s" : ""}. Réessayez.`,
-      );
-      return;
-    }
-    setErreur("");
-    await chargerLignes();
-    setMessage("Modifications enregistrées ✓");
-  }
+  const etat: EtatSauvegarde = enCours
+    ? "enCours"
+    : erreur
+      ? "erreur"
+      : enAttente.size > 0
+        ? "attente"
+        : "enregistre";
 
   const totalEnvoye = lignes.reduce((s, l) => s + l.envoye, 0);
   const totalVendu = lignes.reduce((s, l) => s + l.vendu, 0);
@@ -171,7 +321,7 @@ export default function SuiviPage() {
     <div>
       <PageHeader
         titre="Suivi mensuel"
-        sousTitre="Saisissez les quantités envoyées et vendues, par boutique et par mois."
+        sousTitre="Saisissez les quantités envoyées et vendues, par boutique et par mois. Les modifications sont enregistrées automatiquement."
       />
 
       {/* Barre de sélection */}
@@ -181,7 +331,6 @@ export default function SuiviPage() {
           <select
             className="select"
             value={boutiqueId ?? ""}
-            disabled={enregistrement}
             onChange={(e) => {
               const id = Number(e.target.value);
               changerSelection(() => setBoutiqueId(id));
@@ -201,7 +350,6 @@ export default function SuiviPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => changerSelection(() => setMois(moisPrecedent(mois)))}
-              disabled={enregistrement}
               aria-label="Mois précédent"
             >
               ‹
@@ -210,7 +358,6 @@ export default function SuiviPage() {
               type="month"
               className="input w-[170px]"
               value={mois}
-              disabled={enregistrement}
               onChange={(e) => {
                 const m = e.target.value || moisActuel();
                 changerSelection(() => setMois(m));
@@ -219,7 +366,6 @@ export default function SuiviPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => changerSelection(() => setMois(moisSuivant(mois)))}
-              disabled={enregistrement}
               aria-label="Mois suivant"
             >
               ›
@@ -227,29 +373,20 @@ export default function SuiviPage() {
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          {erreur && (
-            <span className="text-sm text-[var(--danger)] font-medium">
-              {erreur}
-            </span>
+        <div className="ml-auto flex items-center gap-3" aria-live="polite">
+          <StatutSauvegarde
+            etat={etat}
+            nbEnAttente={enAttente.size}
+            derniereSauvegarde={derniereSauvegarde}
+          />
+          {etat === "erreur" && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => sauvegarder()}
+            >
+              Réessayer
+            </button>
           )}
-          {message && (
-            <span className="text-sm text-[var(--success)] font-medium">
-              {message}
-            </span>
-          )}
-          {dirty.size > 0 && (
-            <span className="badge badge-warning">
-              {dirty.size} modif. non enregistrée{dirty.size > 1 ? "s" : ""}
-            </span>
-          )}
-          <button
-            className="btn btn-primary"
-            onClick={enregistrer}
-            disabled={enregistrement || dirty.size === 0}
-          >
-            {enregistrement ? "Enregistrement…" : "Enregistrer"}
-          </button>
         </div>
       </div>
 
@@ -320,7 +457,23 @@ export default function SuiviPage() {
                 return (
                   <tr key={l.articleId}>
                     <td>
-                      <p className="font-medium">{l.nom}</p>
+                      <p className="font-medium flex items-center gap-2">
+                        {l.nom}
+                        {enAttente.has(l.articleId) && (
+                          <span
+                            className={`inline-block h-2 w-2 rounded-full ${
+                              etat === "erreur"
+                                ? "bg-[var(--danger)]"
+                                : "bg-[var(--warning)]"
+                            }`}
+                            title={
+                              etat === "erreur"
+                                ? "Non enregistré (erreur)"
+                                : "Modification en cours d'enregistrement"
+                            }
+                          />
+                        )}
+                      </p>
                       {l.reference && (
                         <p className="text-xs text-[var(--muted)]">
                           {l.reference}

@@ -203,6 +203,10 @@ body {
   background: var(--surface-2);
   color: var(--muted);
 }
+.badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 
 /* Pastilles de sélection (catégories) */
 .chip {
