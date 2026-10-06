@@ -24,8 +24,9 @@ model Boutique {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  prix    Prix[]
-  entrees Entree[]
+  prix       Prix[]
+  entrees    Entree[]
+  fraisEnvoi FraisEnvoi[]
 }
 
 model Article {
@@ -75,4 +76,17 @@ model Entree {
 
   @@unique([boutiqueId, articleId, mois])
   @@index([mois])
+}
+
+// Frais d'envoi vers une boutique (colis), saisis les mois où il y a un envoi
+model FraisEnvoi {
+  id         Int      @id @default(autoincrement())
+  boutique   Boutique @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  boutiqueId Int
+  mois       String // format "YYYY-MM"
+  montant    Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([boutiqueId, mois])
 }

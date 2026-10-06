@@ -59,8 +59,14 @@ export default async function DashboardPage({
       ? {}
       : { categorie: categorie === SANS_CATEGORIE ? null : categorie };
 
-  const [entrees, nbBoutiques, nbArticles, categoriesDb, aSansCategorie] =
-    await Promise.all([
+  const [
+    entrees,
+    nbBoutiques,
+    nbArticles,
+    categoriesDb,
+    aSansCategorie,
+    fraisEnvois,
+  ] = await Promise.all([
       prisma.entree.findMany({
         where: { article: filtreArticle },
         include: { boutique: true, article: true },
@@ -74,6 +80,10 @@ export default async function DashboardPage({
         orderBy: { categorie: "asc" },
       }),
       prisma.article.count({ where: { categorie: null } }),
+      // Frais d'envoi : non rattachables à une catégorie (comme le loyer)
+      categorie
+        ? Promise.resolve([])
+        : prisma.fraisEnvoi.findMany({ include: { boutique: true } }),
     ]);
   const categories = categoriesDb
     .map((c) => c.categorie)
@@ -97,8 +107,8 @@ export default async function DashboardPage({
     { ca: number; vendu: number; frais: number; materiel: number }
   >();
   // Frais boutiques : commission sur chaque vente + loyer pour chaque mois où
-  // la boutique a un suivi saisi. Avec un filtre de catégorie, le loyer (non
-  // rattachable à une catégorie) n'est pas compté.
+  // la boutique a un suivi saisi + frais d'envoi. Avec un filtre de catégorie,
+  // le loyer et les envois (non rattachables à une catégorie) ne sont pas comptés.
   let fraisTotal = 0;
   let fraisMois = 0;
   // Frais de fabrication (achat de matériel) des articles vendus
@@ -163,6 +173,19 @@ export default async function DashboardPage({
     pa.vendu += e.vendu;
     pa.envoye += e.envoye;
     parArticleMap.set(e.article.nom, pa);
+  }
+
+  for (const f of fraisEnvois) {
+    fraisTotal += f.montant;
+    if (f.mois === moisCourant) fraisMois += f.montant;
+    const pb = parBoutiqueMap.get(f.boutique.nom) ?? {
+      ca: 0,
+      vendu: 0,
+      frais: 0,
+      materiel: 0,
+    };
+    pb.frais += f.montant;
+    parBoutiqueMap.set(f.boutique.nom, pb);
   }
 
   // Série des 12 derniers mois (chronologique)
@@ -280,7 +303,11 @@ export default async function DashboardPage({
           <StatCard
             titre="Frais boutiques"
             valeur={`− ${formatMontant(fraisTotal)}`}
-            sousTitre={categorie ? "Commissions (hors loyers)" : "Loyers + commissions"}
+            sousTitre={
+              categorie
+                ? "Commissions (hors loyers et envois)"
+                : "Loyers + commissions + envois"
+            }
           />
           <StatCard
             titre="Frais matériel"

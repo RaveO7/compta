@@ -103,6 +103,10 @@ export default function SuiviPage() {
   const [derniereSauvegarde, setDerniereSauvegarde] = useState<Date | null>(
     null,
   );
+  // Frais d'envoi (colis) du mois pour la boutique : saisie + valeur enregistrée
+  const [envoiSaisie, setEnvoiSaisie] = useState("");
+  const [envoiEnregistre, setEnvoiEnregistre] = useState(0);
+  const [envoiEtat, setEnvoiEtat] = useState<"ok" | "enCours" | "erreur">("ok");
 
   // Lignes affichées + la boutique/le mois auxquels elles appartiennent :
   // un enregistrement part toujours vers le mois des lignes, jamais vers un
@@ -142,14 +146,20 @@ export default function SuiviPage() {
     const selection = `${boutiqueId}|${mois}`;
     const requete = ++requeteRef.current;
     setChargement(true);
-    const res = await fetch(
-      `/api/entrees?mois=${mois}&boutiqueId=${boutiqueId}`,
-      { cache: "no-store" },
-    );
-    const data: Ligne[] = await res.json();
+    const [data, envoi]: [Ligne[], { montant: number }] = await Promise.all([
+      fetch(`/api/entrees?mois=${mois}&boutiqueId=${boutiqueId}`, {
+        cache: "no-store",
+      }).then((r) => r.json()),
+      fetch(`/api/frais-envoi?mois=${mois}&boutiqueId=${boutiqueId}`, {
+        cache: "no-store",
+      }).then((r) => r.json()),
+    ]);
     if (requete !== requeteRef.current || selection !== selectionRef.current) {
       return;
     }
+    setEnvoiEnregistre(envoi.montant);
+    setEnvoiSaisie(envoi.montant > 0 ? String(envoi.montant) : "");
+    setEnvoiEtat("ok");
     lignesRef.current = data;
     selectionLignesRef.current = { boutiqueId, mois };
     modifsRef.current = new Map();
@@ -245,6 +255,30 @@ export default function SuiviPage() {
     }, DELAI_AUTO);
   }
 
+  // Enregistre le frais d'envoi (à la sortie du champ ou sur Entrée), toujours
+  // pour la boutique / le mois des lignes affichées.
+  async function enregistrerEnvoi() {
+    const selection = selectionLignesRef.current;
+    if (!selection) return;
+    const montant = Number(envoiSaisie.replace(",", ".")) || 0;
+    if (montant < 0 || montant === envoiEnregistre) return;
+    setEnvoiEtat("enCours");
+    const ok = await fetch("/api/frais-envoi", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ ...selection, montant }),
+    })
+      .then((r) => r.ok)
+      .catch(() => false);
+    const toujoursAffiche =
+      selectionLignesRef.current?.boutiqueId === selection.boutiqueId &&
+      selectionLignesRef.current?.mois === selection.mois;
+    if (!toujoursAffiche) return;
+    setEnvoiEtat(ok ? "ok" : "erreur");
+    if (ok) setEnvoiEnregistre(montant);
+  }
+
   const aDesModifs = enAttente.size > 0 || enCours;
 
   // Fermeture / rechargement de l'onglet avec des modifications non
@@ -313,7 +347,8 @@ export default function SuiviPage() {
   const boutique = boutiques.find((b) => b.id === boutiqueId);
   const loyer = boutique?.loyerMensuel ?? 0;
   const commission = boutique ? montantCommission(totalCA, boutique) : 0;
-  const totalFrais = loyer + commission;
+  const envoi = Number(envoiSaisie.replace(",", ".")) || 0;
+  const totalFrais = loyer + commission + envoi;
   // Frais de fabrication (matériel) des articles vendus ce mois-ci
   const totalMateriel = lignes.reduce((s, l) => s + l.vendu * l.coutUnitaire, 0);
   const net = totalCA - totalFrais - totalMateriel;
@@ -387,6 +422,37 @@ export default function SuiviPage() {
           </div>
         </div>
 
+        <div>
+          <label className="label" htmlFor="frais-envoi">
+            Frais d&apos;envoi du mois
+          </label>
+          <div className="relative w-36">
+            <input
+              id="frais-envoi"
+              className={`input pr-7 ${envoiEtat === "erreur" ? "border-[var(--danger)]" : ""}`}
+              type="number"
+              step="0.01"
+              min="0"
+              value={envoiSaisie}
+              disabled={chargement}
+              onChange={(e) => setEnvoiSaisie(e.target.value)}
+              onBlur={enregistrerEnvoi}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              placeholder="0.00"
+              title={
+                envoiEtat === "erreur"
+                  ? "Frais d'envoi non enregistré — réessayez"
+                  : "Colis envoyé à la boutique ce mois-ci (laisser vide si aucun)"
+              }
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] text-sm">
+              {envoiEtat === "enCours" ? "…" : "€"}
+            </span>
+          </div>
+        </div>
+
         <div className="ml-auto flex items-center gap-3" aria-live="polite">
           <StatutSauvegarde
             etat={etat}
@@ -437,11 +503,12 @@ export default function SuiviPage() {
             {totalFrais > 0 ? `− ${formatMontant(totalFrais)}` : formatMontant(0)}
           </p>
           <p className="text-xs text-[var(--muted)] mt-1">
-            {boutique && aDesFrais(boutique)
+            {boutique && (aDesFrais(boutique) || envoi > 0)
               ? [
                   loyer > 0 && `Loyer ${formatMontant(loyer)}`,
                   boutique.commission > 0 &&
                     `${boutique.commission.toLocaleString("fr-FR")} % : ${formatMontant(commission)}`,
+                  envoi > 0 && `Envoi ${formatMontant(envoi)}`,
                 ]
                   .filter(Boolean)
                   .join(" · ")
