@@ -13,6 +13,7 @@ import {
   GraphiqueFluxStock,
   GraphiqueStockArticles,
 } from "@/components/DashboardCharts";
+import { montantCommission } from "@/lib/frais";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,16 @@ export default async function DashboardPage({
 
   // Agrégations
   const parMoisMap = new Map<string, { ca: number; vendu: number; envoye: number }>();
-  const parBoutiqueMap = new Map<string, { ca: number; vendu: number }>();
+  const parBoutiqueMap = new Map<
+    string,
+    { ca: number; vendu: number; frais: number }
+  >();
+  // Frais boutiques : commission sur chaque vente + loyer pour chaque mois où
+  // la boutique a un suivi saisi. Avec un filtre de catégorie, le loyer (non
+  // rattachable à une catégorie) n'est pas compté.
+  let fraisTotal = 0;
+  let fraisMois = 0;
+  const moisAvecLoyer = new Set<string>();
   const parCategorieMap = new Map<string, { ca: number; vendu: number }>();
   const parArticleMap = new Map<
     string,
@@ -100,6 +110,14 @@ export default async function DashboardPage({
 
   for (const e of entrees) {
     const ca = e.vendu * e.prixUnitaire;
+    let frais = montantCommission(ca, e.boutique);
+    const cleLoyer = `${e.boutiqueId}|${e.mois}`;
+    if (!categorie && !moisAvecLoyer.has(cleLoyer)) {
+      moisAvecLoyer.add(cleLoyer);
+      frais += e.boutique.loyerMensuel;
+    }
+    fraisTotal += frais;
+    if (e.mois === moisCourant) fraisMois += frais;
     caTotal += ca;
     venduTotal += e.vendu;
     envoyeTotal += e.envoye;
@@ -116,9 +134,14 @@ export default async function DashboardPage({
     pm.envoye += e.envoye;
     parMoisMap.set(e.mois, pm);
 
-    const pb = parBoutiqueMap.get(e.boutique.nom) ?? { ca: 0, vendu: 0 };
+    const pb = parBoutiqueMap.get(e.boutique.nom) ?? {
+      ca: 0,
+      vendu: 0,
+      frais: 0,
+    };
     pb.ca += ca;
     pb.vendu += e.vendu;
+    pb.frais += frais;
     parBoutiqueMap.set(e.boutique.nom, pb);
 
     const nomCategorie = e.article.categorie ?? "Sans catégorie";
@@ -242,6 +265,30 @@ export default async function DashboardPage({
           sousTitre={`${envoyeTotal} envoyés au total`}
         />
       </div>
+
+      {fraisTotal > 0 && (
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
+          <StatCard
+            titre="Frais boutiques"
+            valeur={`− ${formatMontant(fraisTotal)}`}
+            sousTitre={categorie ? "Commissions (hors loyers)" : "Loyers + commissions"}
+          />
+          <StatCard
+            titre="Net total"
+            valeur={formatMontant(caTotal - fraisTotal)}
+            sousTitre="CA − frais boutiques"
+            accent
+          />
+          <StatCard
+            titre={`Frais ${formatMois(moisCourant)}`}
+            valeur={`− ${formatMontant(fraisMois)}`}
+          />
+          <StatCard
+            titre={`Net ${formatMois(moisCourant)}`}
+            valeur={formatMontant(caMois - fraisMois)}
+          />
+        </div>
+      )}
 
       {aucuneDonnee && categorie ? (
         <div className="card p-10 text-center">
@@ -388,6 +435,12 @@ export default async function DashboardPage({
                       <th>Boutique</th>
                       <th className="text-center">Vendus</th>
                       <th className="text-right">CA</th>
+                      {fraisTotal > 0 && (
+                        <>
+                          <th className="text-right">Frais</th>
+                          <th className="text-right">Net</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -398,6 +451,16 @@ export default async function DashboardPage({
                         <td className="text-right font-semibold tabular-nums">
                           {formatMontant(b.ca)}
                         </td>
+                        {fraisTotal > 0 && (
+                          <>
+                            <td className="text-right tabular-nums text-[var(--muted)]">
+                              {b.frais > 0 ? `− ${formatMontant(b.frais)}` : "—"}
+                            </td>
+                            <td className="text-right font-semibold tabular-nums">
+                              {formatMontant(b.ca - b.frais)}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>

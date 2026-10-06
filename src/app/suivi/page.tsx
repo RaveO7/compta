@@ -5,8 +5,15 @@ import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import OptionsBoutiques from "@/components/OptionsBoutiques";
 import { formatMontant, formatMois, moisActuel } from "@/lib/format";
+import { aDesFrais, libelleFrais, montantCommission } from "@/lib/frais";
 
-type Boutique = { id: number; nom: string; archivee: boolean };
+type Boutique = {
+  id: number;
+  nom: string;
+  archivee: boolean;
+  loyerMensuel: number;
+  commission: number;
+};
 type Ligne = {
   articleId: number;
   nom: string;
@@ -302,6 +309,11 @@ export default function SuiviPage() {
     (s, l) => s + l.stockAnterieur + l.envoye - l.vendu,
     0,
   );
+  const boutique = boutiques.find((b) => b.id === boutiqueId);
+  const loyer = boutique?.loyerMensuel ?? 0;
+  const commission = boutique ? montantCommission(totalCA, boutique) : 0;
+  const totalFrais = loyer + commission;
+  const net = totalCA - totalFrais;
 
   if (boutiques.length === 0 && !chargement) {
     return (
@@ -390,7 +402,7 @@ export default function SuiviPage() {
       </div>
 
       {/* Cartes de totaux */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
         <div className="card p-4">
           <p className="text-xs text-[var(--muted)] font-medium uppercase">
             Envoyé
@@ -411,12 +423,45 @@ export default function SuiviPage() {
             {formatMontant(totalCA)}
           </p>
         </div>
+        <div
+          className="card p-4"
+          title={boutique ? libelleFrais(boutique, formatMontant) : undefined}
+        >
+          <p className="text-xs text-[var(--muted)] font-medium uppercase">
+            Frais boutique
+          </p>
+          <p className="text-2xl font-bold tabular-nums mt-1">
+            {totalFrais > 0 ? `− ${formatMontant(totalFrais)}` : formatMontant(0)}
+          </p>
+          <p className="text-xs text-[var(--muted)] mt-1">
+            {boutique && aDesFrais(boutique)
+              ? [
+                  loyer > 0 && `Loyer ${formatMontant(loyer)}`,
+                  boutique.commission > 0 &&
+                    `${boutique.commission.toLocaleString("fr-FR")} % : ${formatMontant(commission)}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Aucun frais"}
+          </p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs text-[var(--muted)] font-medium uppercase">
+            Net
+          </p>
+          <p
+            className={`text-2xl font-bold tabular-nums mt-1 ${net < 0 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}
+          >
+            {formatMontant(net)}
+          </p>
+          <p className="text-xs text-[var(--muted)] mt-1">CA − frais</p>
+        </div>
       </div>
 
       <p className="text-sm text-[var(--muted)] mb-3">
         {formatMois(mois)} —{" "}
-        {boutiques.find((b) => b.id === boutiqueId)?.nom}
-        {boutiques.find((b) => b.id === boutiqueId)?.archivee &&
+        {boutique?.nom}
+        {boutique?.archivee &&
           " (boutique archivée)"}
       </p>
 

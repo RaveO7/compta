@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
+import { formatMontant } from "@/lib/format";
+import { aDesFrais, libelleFrais } from "@/lib/frais";
 
 type Boutique = {
   id: number;
@@ -12,9 +14,18 @@ type Boutique = {
   adresse: string | null;
   notes: string | null;
   archivee: boolean;
+  loyerMensuel: number;
+  commission: number;
 };
 
-const vide = { nom: "", contact: "", adresse: "", notes: "" };
+const vide = {
+  nom: "",
+  contact: "",
+  adresse: "",
+  notes: "",
+  loyerMensuel: "",
+  commission: "",
+};
 
 export default function BoutiquesPage() {
   const [boutiques, setBoutiques] = useState<Boutique[]>([]);
@@ -23,6 +34,7 @@ export default function BoutiquesPage() {
   const [edition, setEdition] = useState<Boutique | null>(null);
   const [form, setForm] = useState(vide);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
   async function charger() {
     setChargement(true);
@@ -38,16 +50,20 @@ export default function BoutiquesPage() {
   function ouvrirAjout() {
     setEdition(null);
     setForm(vide);
+    setErreur(null);
     setOpen(true);
   }
 
   function ouvrirEdition(b: Boutique) {
     setEdition(b);
+    setErreur(null);
     setForm({
       nom: b.nom,
       contact: b.contact ?? "",
       adresse: b.adresse ?? "",
       notes: b.notes ?? "",
+      loyerMensuel: b.loyerMensuel ? String(b.loyerMensuel) : "",
+      commission: b.commission ? String(b.commission) : "",
     });
     setOpen(true);
   }
@@ -56,20 +72,21 @@ export default function BoutiquesPage() {
     e.preventDefault();
     if (!form.nom.trim()) return;
     setEnregistrement(true);
-    if (edition) {
-      await fetch(`/api/boutiques/${edition.id}`, {
-        method: "PATCH",
+    setErreur(null);
+    const res = await fetch(
+      edition ? `/api/boutiques/${edition.id}` : "/api/boutiques",
+      {
+        method: edition ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/boutiques", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    }
+      },
+    );
     setEnregistrement(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErreur(data?.error ?? "Erreur lors de l'enregistrement.");
+      return;
+    }
     setOpen(false);
     await charger();
   }
@@ -131,6 +148,12 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
         {b.adresse && (
           <p className="text-sm text-[var(--muted)]">{b.adresse}</p>
         )}
+        <p
+          className={`text-sm ${aDesFrais(b) ? "font-medium" : "text-[var(--muted)]"}`}
+        >
+          <span className="text-[var(--muted)]">Frais : </span>
+          {libelleFrais(b, formatMontant)}
+        </p>
         {b.notes && (
           <p className="text-sm bg-[var(--surface-2)] rounded-lg p-2 text-[var(--foreground)]">
             {b.notes}
@@ -252,6 +275,54 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               placeholder="Adresse de la boutique"
             />
           </div>
+          <fieldset>
+            <legend className="label">Frais de la boutique</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-[var(--muted)]" htmlFor="loyer">
+                  Loyer mensuel (€)
+                </label>
+                <input
+                  id="loyer"
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.loyerMensuel}
+                  onChange={(e) =>
+                    setForm({ ...form, loyerMensuel: e.target.value })
+                  }
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label
+                  className="text-xs text-[var(--muted)]"
+                  htmlFor="commission"
+                >
+                  Commission sur ventes (%)
+                </label>
+                <input
+                  id="commission"
+                  className="input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={form.commission}
+                  onChange={(e) =>
+                    setForm({ ...form, commission: e.target.value })
+                  }
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Laissez vide si non applicable. Les deux peuvent se cumuler.
+            </p>
+          </fieldset>
           <div>
             <label className="label">Notes</label>
             <textarea
@@ -262,6 +333,11 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               placeholder="Informations utiles…"
             />
           </div>
+          {erreur && (
+            <p className="text-sm text-[var(--danger)]" role="alert">
+              {erreur}
+            </p>
+          )}
           <div className="flex gap-2 justify-end pt-2">
             <button
               type="button"

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { lireFrais } from "@/lib/frais";
 
 export async function PATCH(
   request: Request,
@@ -13,6 +14,21 @@ export async function PATCH(
   if ("adresse" in body) data.adresse = body.adresse?.trim() || null;
   if ("notes" in body) data.notes = body.notes?.trim() || null;
   if (typeof body.archivee === "boolean") data.archivee = body.archivee;
+  if ("loyerMensuel" in body) {
+    const v = lireFrais(body.loyerMensuel);
+    if (v === null)
+      return NextResponse.json({ error: "Loyer invalide." }, { status: 400 });
+    data.loyerMensuel = v;
+  }
+  if ("commission" in body) {
+    const v = lireFrais(body.commission, 100);
+    if (v === null)
+      return NextResponse.json(
+        { error: "La commission doit être entre 0 et 100 %." },
+        { status: 400 },
+      );
+    data.commission = v;
+  }
 
   const boutique = await prisma.boutique.update({
     where: { id: Number(id) },

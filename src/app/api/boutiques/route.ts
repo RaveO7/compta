@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { lireFrais } from "@/lib/frais";
 
 // Par défaut : boutiques actives uniquement. `?toutes=1` inclut les archivées.
 export async function GET(request: Request) {
@@ -17,8 +18,18 @@ export async function POST(request: Request) {
   if (!nom) {
     return NextResponse.json({ error: "Le nom est requis." }, { status: 400 });
   }
+  const loyerMensuel = lireFrais(body.loyerMensuel);
+  const commission = lireFrais(body.commission, 100);
+  if (loyerMensuel === null || commission === null) {
+    return NextResponse.json(
+      { error: "Loyer ou commission invalide." },
+      { status: 400 },
+    );
+  }
   const boutique = await prisma.boutique.create({
     data: {
+      loyerMensuel,
+      commission,
       nom,
       contact: body.contact?.trim() || null,
       adresse: body.adresse?.trim() || null,
