@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     data: {
       nom,
       reference: body.reference?.trim() || null,
+      categorie: body.categorie?.trim() || null,
       prixDefaut: Number(body.prixDefaut) || 0,
     },
   });

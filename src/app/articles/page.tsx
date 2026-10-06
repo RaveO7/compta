@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
@@ -11,12 +11,17 @@ type Article = {
   id: number;
   nom: string;
   reference: string | null;
+  categorie: string | null;
   prixDefaut: number;
   prix: Prix[];
 };
 type Boutique = { id: number; nom: string };
 
-const vide = { nom: "", reference: "", prixDefaut: "" };
+const vide = { nom: "", reference: "", categorie: "", prixDefaut: "" };
+
+// Catégories proposées par défaut (complétées par celles déjà utilisées)
+const CATEGORIES_SUGGEREES = ["Print", "Lino", "Stickers"];
+const SANS_CATEGORIE = "__aucune__";
 
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -32,6 +37,66 @@ export default function ArticlesPage() {
   const [prixOpen, setPrixOpen] = useState(false);
   const [articlePrix, setArticlePrix] = useState<Article | null>(null);
   const [prixForm, setPrixForm] = useState<Record<number, string>>({});
+
+  // Filtre par catégorie ("" = toutes)
+  const [filtre, setFiltre] = useState("");
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of articles) if (a.categorie) set.add(a.categorie);
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [articles]);
+
+  // Catégories créées via « + » mais pas encore enregistrées sur un article
+  const [categoriesAjoutees, setCategoriesAjoutees] = useState<string[]>([]);
+  const [ajoutCategorie, setAjoutCategorie] = useState(false);
+  const [nouvelleCategorie, setNouvelleCategorie] = useState("");
+
+  const suggestions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...categories,
+          ...CATEGORIES_SUGGEREES,
+          ...categoriesAjoutees,
+        ]),
+      ].sort((a, b) => a.localeCompare(b, "fr")),
+    [categories, categoriesAjoutees],
+  );
+
+  function validerNouvelleCategorie() {
+    const nom = nouvelleCategorie.trim();
+    if (!nom) return;
+    // Réutilise une catégorie existante si seule la casse diffère
+    const existante = suggestions.find(
+      (c) => c.toLocaleLowerCase("fr") === nom.toLocaleLowerCase("fr"),
+    );
+    if (!existante) setCategoriesAjoutees([...categoriesAjoutees, nom]);
+    setForm({ ...form, categorie: existante ?? nom });
+    setNouvelleCategorie("");
+    setAjoutCategorie(false);
+  }
+
+  function annulerNouvelleCategorie() {
+    setNouvelleCategorie("");
+    setAjoutCategorie(false);
+  }
+
+  const aSansCategorie = articles.some((a) => !a.categorie);
+
+  // Si la catégorie filtrée n'existe plus (article modifié/supprimé), on affiche tout
+  const filtreActif =
+    categories.includes(filtre) || (filtre === SANS_CATEGORIE && aSansCategorie)
+      ? filtre
+      : "";
+
+  const articlesFiltres = articles.filter((a) =>
+    filtreActif === ""
+      ? true
+      : filtreActif === SANS_CATEGORIE
+        ? !a.categorie
+        : a.categorie === filtreActif,
+  );
 
   async function charger() {
     setChargement(true);
@@ -49,16 +114,19 @@ export default function ArticlesPage() {
   }, []);
 
   function ouvrirAjout() {
+    annulerNouvelleCategorie();
     setEdition(null);
     setForm(vide);
     setOpen(true);
   }
 
   function ouvrirEdition(a: Article) {
+    annulerNouvelleCategorie();
     setEdition(a);
     setForm({
       nom: a.nom,
       reference: a.reference ?? "",
+      categorie: a.categorie ?? "",
       prixDefaut: String(a.prixDefaut),
     });
     setOpen(true);
@@ -71,6 +139,7 @@ export default function ArticlesPage() {
     const payload = {
       nom: form.nom,
       reference: form.reference,
+      categorie: form.categorie,
       prixDefaut: parseFloat(form.prixDefaut) || 0,
     };
     if (edition) {
@@ -168,69 +237,106 @@ export default function ArticlesPage() {
           }
         />
       ) : (
-        <div className="card table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Article</th>
-                <th>Référence</th>
-                <th className="text-right">Prix par défaut</th>
-                <th>Prix spécifiques</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {articles.map((a) => (
-                <tr key={a.id}>
-                  <td className="font-medium">{a.nom}</td>
-                  <td className="text-[var(--muted)]">
-                    {a.reference || "—"}
-                  </td>
-                  <td className="text-right font-semibold tabular-nums">
-                    {formatMontant(a.prixDefaut)}
-                  </td>
-                  <td>
-                    {a.prix.length > 0 ? (
-                      <span className="badge badge-primary">
-                        {a.prix.length} boutique{a.prix.length > 1 ? "s" : ""}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--muted)] text-sm">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => ouvrirPrix(a)}
-                        disabled={boutiques.length === 0}
-                        title={
-                          boutiques.length === 0
-                            ? "Ajoutez d'abord une boutique"
-                            : "Prix par boutique"
-                        }
-                      >
-                        Prix / boutique
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => ouvrirEdition(a)}
-                      >
-                        Modifier
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => supprimer(a)}
-                      >
-                        Suppr.
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+        <>
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                className={`btn btn-sm ${filtreActif === "" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setFiltre("")}
+              >
+                Toutes ({articles.length})
+              </button>
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  className={`btn btn-sm ${filtreActif === c ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setFiltre(c)}
+                >
+                  {c} ({articles.filter((a) => a.categorie === c).length})
+                </button>
               ))}
-            </tbody>
-          </table>
-        </div>
+              {aSansCategorie && (
+                <button
+                  className={`btn btn-sm ${filtreActif === SANS_CATEGORIE ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setFiltre(SANS_CATEGORIE)}
+                >
+                  Sans catégorie ({articles.filter((a) => !a.categorie).length})
+                </button>
+              )}
+            </div>
+          )}
+          <div className="card table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Article</th>
+                  <th>Catégorie</th>
+                  <th>Référence</th>
+                  <th className="text-right">Prix par défaut</th>
+                  <th>Prix spécifiques</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {articlesFiltres.map((a) => (
+                  <tr key={a.id}>
+                    <td className="font-medium">{a.nom}</td>
+                    <td>
+                      {a.categorie ? (
+                        <span className="badge badge-muted">{a.categorie}</span>
+                      ) : (
+                        <span className="text-[var(--muted)] text-sm">—</span>
+                      )}
+                    </td>
+                    <td className="text-[var(--muted)]">
+                      {a.reference || "—"}
+                    </td>
+                    <td className="text-right font-semibold tabular-nums">
+                      {formatMontant(a.prixDefaut)}
+                    </td>
+                    <td>
+                      {a.prix.length > 0 ? (
+                        <span className="badge badge-primary">
+                          {a.prix.length} boutique{a.prix.length > 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--muted)] text-sm">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => ouvrirPrix(a)}
+                          disabled={boutiques.length === 0}
+                          title={
+                            boutiques.length === 0
+                              ? "Ajoutez d'abord une boutique"
+                              : "Prix par boutique"
+                          }
+                        >
+                          Prix / boutique
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => ouvrirEdition(a)}
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => supprimer(a)}
+                        >
+                          Suppr.
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Modal création / édition */}
@@ -249,6 +355,80 @@ export default function ArticlesPage() {
               onChange={(e) => setForm({ ...form, nom: e.target.value })}
               placeholder="Ex : Bougie parfumée"
             />
+          </div>
+          <div>
+            <label className="label">Catégorie</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {suggestions.map((c) => {
+                const actif = form.categorie === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`chip ${actif ? "chip-actif" : ""}`}
+                    aria-pressed={actif}
+                    onClick={() =>
+                      setForm({ ...form, categorie: actif ? "" : c })
+                    }
+                  >
+                    {actif && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                    )}
+                    {c}
+                  </button>
+                );
+              })}
+              {ajoutCategorie ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    className="input chip-input"
+                    value={nouvelleCategorie}
+                    autoFocus
+                    onChange={(e) => setNouvelleCategorie(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        validerNouvelleCategorie();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        annulerNouvelleCategorie();
+                      }
+                    }}
+                    placeholder="Nouvelle catégorie"
+                  />
+                  <button
+                    type="button"
+                    className="chip chip-icone chip-actif"
+                    onClick={validerNouvelleCategorie}
+                    disabled={!nouvelleCategorie.trim()}
+                    title="Ajouter"
+                    aria-label="Ajouter la catégorie"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="chip chip-icone"
+                    onClick={annulerNouvelleCategorie}
+                    title="Annuler"
+                    aria-label="Annuler"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="chip chip-ajout"
+                  onClick={() => setAjoutCategorie(true)}
+                  title="Ajouter une nouvelle catégorie"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Nouvelle
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <label className="label">Référence</label>

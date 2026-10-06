@@ -204,6 +204,63 @@ body {
   color: var(--muted);
 }
 
+/* Pastilles de sélection (catégories) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.chip:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  border-color: var(--primary);
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.chip-actif,
+.chip-actif:hover:not(:disabled) {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.chip-ajout {
+  border-style: dashed;
+  color: var(--muted);
+}
+.chip-ajout:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.chip-icone {
+  width: 2rem;
+  padding: 0;
+  justify-content: center;
+}
+.input.chip-input {
+  width: 11rem;
+  height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
 /* Liens de navigation */
 .nav-link {
   display: flex;

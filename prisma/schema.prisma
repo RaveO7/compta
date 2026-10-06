@@ -27,12 +27,15 @@ model Article {
   id          Int      @id @default(autoincrement())
   nom         String
   reference   String?
+  categorie   String? // ex : Print, Lino, Stickers…
   prixDefaut  Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   prix    Prix[]
   entrees Entree[]
+
+  @@index([categorie])
 }
 
 // Prix d'un article spécifique à une boutique

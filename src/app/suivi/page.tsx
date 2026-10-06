@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { formatMontant, formatMois, moisActuel } from "@/lib/format";
@@ -40,6 +40,7 @@ export default function SuiviPage() {
   const [chargement, setChargement] = useState(true);
   const [enregistrement, setEnregistrement] = useState(false);
   const [message, setMessage] = useState("");
+  const [erreur, setErreur] = useState("");
 
   useEffect(() => {
     fetch("/api/boutiques")
@@ -51,14 +52,29 @@ export default function SuiviPage() {
       });
   }, []);
 
+  // Boutique + mois actuellement affichés : sert à ignorer une réponse arrivée
+  // en retard pour un autre mois (sinon le tableau affiche les chiffres d'un
+  // mois sous l'intitulé d'un autre, et l'enregistrement les écrit au mauvais mois).
+  const selectionRef = useRef("");
+  const requeteRef = useRef(0);
+  useEffect(() => {
+    selectionRef.current = `${boutiqueId}|${mois}`;
+  }, [boutiqueId, mois]);
+
   const chargerLignes = useCallback(async () => {
     if (!boutiqueId) return;
+    const selection = `${boutiqueId}|${mois}`;
+    const requete = ++requeteRef.current;
     setChargement(true);
-    setMessage("");
     const res = await fetch(
       `/api/entrees?mois=${mois}&boutiqueId=${boutiqueId}`,
+      { cache: "no-store" },
     );
-    setLignes(await res.json());
+    const data = await res.json();
+    if (requete !== requeteRef.current || selection !== selectionRef.current) {
+      return;
+    }
+    setLignes(data);
     setDirty(new Set());
     setChargement(false);
   }, [boutiqueId, mois]);
@@ -66,6 +82,20 @@ export default function SuiviPage() {
   useEffect(() => {
     if (boutiqueId) chargerLignes();
   }, [boutiqueId, mois, chargerLignes]);
+
+  // Changer de boutique / de mois sans perdre de saisie par inadvertance
+  function changerSelection(action: () => void) {
+    if (
+      dirty.size > 0 &&
+      !window.confirm(
+        "Des modifications ne sont pas enregistrées et seront perdues. Continuer ?",
+      )
+    ) {
+      return;
+    }
+    setMessage("");
+    action();
+  }
 
   function maj(articleId: number, champ: keyof Ligne, valeur: number) {
     setLignes((prev) =>
@@ -80,8 +110,9 @@ export default function SuiviPage() {
   async function enregistrer() {
     if (!boutiqueId || dirty.size === 0) return;
     setEnregistrement(true);
+    setMessage("");
     const aEnregistrer = lignes.filter((l) => dirty.has(l.articleId));
-    await Promise.all(
+    const reponses = await Promise.all(
       aEnregistrer.map((l) =>
         fetch("/api/entrees", {
           method: "POST",
@@ -94,12 +125,21 @@ export default function SuiviPage() {
             vendu: l.vendu,
             prixUnitaire: l.prixUnitaire,
           }),
-        }),
+        }).catch(() => null),
       ),
     );
     setEnregistrement(false);
-    setMessage("Modifications enregistrées ✓");
+    const echecs = reponses.filter((r) => !r || !r.ok).length;
+    if (echecs > 0) {
+      // On garde la saisie à l'écran pour pouvoir réessayer
+      setErreur(
+        `${echecs} ligne${echecs > 1 ? "s" : ""} non enregistrée${echecs > 1 ? "s" : ""}. Réessayez.`,
+      );
+      return;
+    }
+    setErreur("");
     await chargerLignes();
+    setMessage("Modifications enregistrées ✓");
   }
 
   const totalEnvoye = lignes.reduce((s, l) => s + l.envoye, 0);
@@ -141,7 +181,11 @@ export default function SuiviPage() {
           <select
             className="select"
             value={boutiqueId ?? ""}
-            onChange={(e) => setBoutiqueId(Number(e.target.value))}
+            disabled={enregistrement}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              changerSelection(() => setBoutiqueId(id));
+            }}
           >
             {boutiques.map((b) => (
               <option key={b.id} value={b.id}>
@@ -156,7 +200,8 @@ export default function SuiviPage() {
           <div className="flex items-center gap-1">
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => setMois(moisPrecedent(mois))}
+              onClick={() => changerSelection(() => setMois(moisPrecedent(mois)))}
+              disabled={enregistrement}
               aria-label="Mois précédent"
             >
               ‹
@@ -165,11 +210,16 @@ export default function SuiviPage() {
               type="month"
               className="input w-[170px]"
               value={mois}
-              onChange={(e) => setMois(e.target.value || moisActuel())}
+              disabled={enregistrement}
+              onChange={(e) => {
+                const m = e.target.value || moisActuel();
+                changerSelection(() => setMois(m));
+              }}
             />
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => setMois(moisSuivant(mois))}
+              onClick={() => changerSelection(() => setMois(moisSuivant(mois)))}
+              disabled={enregistrement}
               aria-label="Mois suivant"
             >
               ›
@@ -178,6 +228,11 @@ export default function SuiviPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          {erreur && (
+            <span className="text-sm text-[var(--danger)] font-medium">
+              {erreur}
+            </span>
+          )}
           {message && (
             <span className="text-sm text-[var(--success)] font-medium">
               {message}
@@ -275,6 +330,7 @@ export default function SuiviPage() {
                     <td>
                       <input
                         type="number"
+                        onWheel={(e) => e.currentTarget.blur()}
                         step="0.01"
                         min="0"
                         className="input !py-1.5 w-24 text-right ml-auto"
@@ -291,6 +347,7 @@ export default function SuiviPage() {
                     <td>
                       <input
                         type="number"
+                        onWheel={(e) => e.currentTarget.blur()}
                         min="0"
                         className="input !py-1.5 w-20 text-center mx-auto"
                         value={l.envoye || ""}
@@ -307,6 +364,7 @@ export default function SuiviPage() {
                     <td>
                       <input
                         type="number"
+                        onWheel={(e) => e.currentTarget.blur()}
                         min="0"
                         className="input !py-1.5 w-20 text-center mx-auto"
                         value={l.vendu || ""}

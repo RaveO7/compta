@@ -10,6 +10,7 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if (typeof body.nom === "string") data.nom = body.nom.trim();
   if ("reference" in body) data.reference = body.reference?.trim() || null;
+  if ("categorie" in body) data.categorie = body.categorie?.trim() || null;
   if ("prixDefaut" in body) data.prixDefaut = Number(body.prixDefaut) || 0;
 
   const article = await prisma.article.update({

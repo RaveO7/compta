@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   formatMontant,
   formatMois,
@@ -43,14 +44,39 @@ function StatCard({
   );
 }
 
-export default async function DashboardPage() {
-  const [entrees, nbBoutiques, nbArticles] = await Promise.all([
-    prisma.entree.findMany({
-      include: { boutique: true, article: true },
-    }),
-    prisma.boutique.count(),
-    prisma.article.count(),
-  ]);
+const SANS_CATEGORIE = "__aucune__";
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const param = (await searchParams).categorie;
+  const categorie = typeof param === "string" && param ? param : null;
+  const filtreArticle: Prisma.ArticleWhereInput =
+    categorie === null
+      ? {}
+      : { categorie: categorie === SANS_CATEGORIE ? null : categorie };
+
+  const [entrees, nbBoutiques, nbArticles, categoriesDb, aSansCategorie] =
+    await Promise.all([
+      prisma.entree.findMany({
+        where: { article: filtreArticle },
+        include: { boutique: true, article: true },
+      }),
+      prisma.boutique.count(),
+      prisma.article.count({ where: filtreArticle }),
+      prisma.article.findMany({
+        where: { categorie: { not: null } },
+        distinct: ["categorie"],
+        select: { categorie: true },
+        orderBy: { categorie: "asc" },
+      }),
+      prisma.article.count({ where: { categorie: null } }),
+    ]);
+  const categories = categoriesDb
+    .map((c) => c.categorie)
+    .filter((c): c is string => !!c);
 
   const moisCourant = moisActuel();
 
@@ -66,6 +92,7 @@ export default async function DashboardPage() {
   // Agrégations
   const parMoisMap = new Map<string, { ca: number; vendu: number; envoye: number }>();
   const parBoutiqueMap = new Map<string, { ca: number; vendu: number }>();
+  const parCategorieMap = new Map<string, { ca: number; vendu: number }>();
   const parArticleMap = new Map<
     string,
     { ca: number; vendu: number; envoye: number }
@@ -94,6 +121,12 @@ export default async function DashboardPage() {
     pb.vendu += e.vendu;
     parBoutiqueMap.set(e.boutique.nom, pb);
 
+    const nomCategorie = e.article.categorie ?? "Sans catégorie";
+    const pc = parCategorieMap.get(nomCategorie) ?? { ca: 0, vendu: 0 };
+    pc.ca += ca;
+    pc.vendu += e.vendu;
+    parCategorieMap.set(nomCategorie, pc);
+
     const pa = parArticleMap.get(e.article.nom) ?? { ca: 0, vendu: 0, envoye: 0 };
     pa.ca += ca;
     pa.vendu += e.vendu;
@@ -110,6 +143,10 @@ export default async function DashboardPage() {
     });
 
   const parBoutique = [...parBoutiqueMap.entries()]
+    .map(([nom, v]) => ({ nom, ...v }))
+    .sort((a, b) => b.ca - a.ca);
+
+  const parCategorie = [...parCategorieMap.entries()]
     .map(([nom, v]) => ({ nom, ...v }))
     .sort((a, b) => b.ca - a.ca);
 
@@ -135,6 +172,15 @@ export default async function DashboardPage() {
 
   const aucuneDonnee = entrees.length === 0;
 
+  const filtres = [
+    { valeur: null, libelle: "Toutes" },
+    ...categories.map((c) => ({ valeur: c, libelle: c })),
+    ...(categories.length > 0 && aSansCategorie > 0
+      ? [{ valeur: SANS_CATEGORIE, libelle: "Sans catégorie" }]
+      : []),
+  ];
+  const libelleFiltre = filtres.find((f) => f.valeur === categorie)?.libelle;
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -149,6 +195,28 @@ export default async function DashboardPage() {
           Saisir un suivi
         </Link>
       </div>
+
+      {/* Filtre par catégorie d'article */}
+      {categories.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          <span className="text-sm font-medium text-[var(--muted)] mr-1">
+            Catégorie :
+          </span>
+          {filtres.map((f) => (
+            <Link
+              key={f.libelle}
+              href={
+                f.valeur
+                  ? `/?categorie=${encodeURIComponent(f.valeur)}`
+                  : "/"
+              }
+              className={`btn btn-sm ${categorie === f.valeur ? "btn-primary" : "btn-secondary"}`}
+            >
+              {f.libelle}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Cartes statistiques */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
@@ -169,13 +237,22 @@ export default async function DashboardPage() {
           sousTitre="Points de vente"
         />
         <StatCard
-          titre="Articles"
+          titre={categorie ? `Articles · ${libelleFiltre ?? categorie}` : "Articles"}
           valeur={String(nbArticles)}
           sousTitre={`${envoyeTotal} envoyés au total`}
         />
       </div>
 
-      {aucuneDonnee ? (
+      {aucuneDonnee && categorie ? (
+        <div className="card p-10 text-center">
+          <p className="text-[var(--muted)]">
+            Aucune vente ni envoi pour la catégorie « {libelleFiltre ?? categorie} ».
+          </p>
+          <Link href="/" className="btn btn-secondary mt-4">
+            Voir toutes les catégories
+          </Link>
+        </div>
+      ) : aucuneDonnee ? (
         <div className="card p-10 text-center">
           <h2 className="text-lg font-semibold">Bienvenue dans Ma Compta 👋</h2>
           <p className="text-[var(--muted)] mt-2 max-w-md mx-auto">
@@ -212,6 +289,17 @@ export default async function DashboardPage() {
               <GraphiqueBoutiques data={parBoutique} />
             </div>
           </div>
+
+          {/* Répartition par catégorie (uniquement sans filtre) */}
+          {!categorie && parCategorie.length > 1 && (
+            <div className="card p-5 mb-6">
+              <h2 className="font-semibold mb-1">CA par catégorie</h2>
+              <p className="text-sm text-[var(--muted)] mb-4">
+                Depuis le début — cliquez sur une catégorie en haut pour filtrer
+              </p>
+              <GraphiqueBoutiques data={parCategorie} />
+            </div>
+          )}
 
           {/* Stock & bilan */}
           <div className="flex items-center justify-between gap-3 mb-3">
