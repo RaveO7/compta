@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import OptionsBoutiques from "@/components/OptionsBoutiques";
@@ -64,19 +64,24 @@ export default function StockPage() {
       .then((m: Matrice) => setMatrice(m));
   }, []);
 
-  const charger = useCallback(async () => {
-    setChargement(true);
+  // Le passage en "chargement" se fait au changement de boutique (onChange)
+  useEffect(() => {
+    let annule = false;
     const url = boutiqueId
       ? `/api/stock?boutiqueId=${boutiqueId}`
       : "/api/stock";
-    const res = await fetch(url);
-    setBilan(await res.json());
-    setChargement(false);
+    fetch(url)
+      .then((r) => r.json())
+      .then((b: Bilan) => {
+        // Ignore la réponse d'une boutique qui n'est plus sélectionnée
+        if (annule) return;
+        setBilan(b);
+        setChargement(false);
+      });
+    return () => {
+      annule = true;
+    };
   }, [boutiqueId]);
-
-  useEffect(() => {
-    charger();
-  }, [charger]);
 
   const nomBoutique =
     boutiqueId === ""
@@ -97,7 +102,10 @@ export default function StockPage() {
           <select
             className="select"
             value={boutiqueId}
-            onChange={(e) => setBoutiqueId(e.target.value)}
+            onChange={(e) => {
+              setChargement(true);
+              setBoutiqueId(e.target.value);
+            }}
           >
             <option value="">Toutes les boutiques (cumulé)</option>
             <OptionsBoutiques boutiques={boutiques} />

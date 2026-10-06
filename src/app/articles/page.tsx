@@ -105,19 +105,25 @@ export default function ArticlesPage() {
         : a.categorie === filtreActif,
   );
 
-  async function charger() {
-    setChargement(true);
-    const [a, b] = await Promise.all([
+  function recuperer(): Promise<[Article[], Boutique[]]> {
+    return Promise.all([
       fetch("/api/articles").then((r) => r.json()),
       fetch("/api/boutiques").then((r) => r.json()),
     ]);
+  }
+
+  function afficher([a, b]: [Article[], Boutique[]]) {
     setArticles(a);
     setBoutiques(b);
     setChargement(false);
   }
 
+  async function charger() {
+    afficher(await recuperer());
+  }
+
   useEffect(() => {
-    charger();
+    recuperer().then(afficher);
   }, []);
 
   function ouvrirAjout() {

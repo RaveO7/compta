@@ -36,15 +36,21 @@ export default function BoutiquesPage() {
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  async function charger() {
-    setChargement(true);
-    const res = await fetch("/api/boutiques?toutes=1");
-    setBoutiques(await res.json());
+  function recuperer(): Promise<Boutique[]> {
+    return fetch("/api/boutiques?toutes=1").then((r) => r.json());
+  }
+
+  function afficher(b: Boutique[]) {
+    setBoutiques(b);
     setChargement(false);
   }
 
+  async function charger() {
+    afficher(await recuperer());
+  }
+
   useEffect(() => {
-    charger();
+    recuperer().then(afficher);
   }, []);
 
   function ouvrirAjout() {

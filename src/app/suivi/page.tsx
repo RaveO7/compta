@@ -144,8 +144,8 @@ export default function SuiviPage() {
   const chargerLignes = useCallback(async () => {
     if (!boutiqueId) return;
     const selection = `${boutiqueId}|${mois}`;
+    // Le passage en "chargement" se fait dans changerSelection
     const requete = ++requeteRef.current;
-    setChargement(true);
     const [data, envoi]: [Ligne[], { montant: number }] = await Promise.all([
       fetch(`/api/entrees?mois=${mois}&boutiqueId=${boutiqueId}`, {
         cache: "no-store",
@@ -316,7 +316,12 @@ export default function SuiviPage() {
   }, [aDesModifs, sauvegarder]);
 
   // Changer de boutique / de mois : on enregistre d'abord la saisie en cours
-  async function changerSelection(action: () => void) {
+  async function changerSelection(nouvelle: Partial<Selection>) {
+    const cible = {
+      boutiqueId: nouvelle.boutiqueId ?? boutiqueId,
+      mois: nouvelle.mois ?? mois,
+    };
+    if (cible.boutiqueId === boutiqueId && cible.mois === mois) return;
     await sauvegarder();
     if (
       modifsRef.current.size > 0 &&
@@ -326,7 +331,10 @@ export default function SuiviPage() {
     ) {
       return;
     }
-    action();
+    // Les lignes se rechargent via l'effet sur boutiqueId / mois
+    setChargement(true);
+    setBoutiqueId(cible.boutiqueId);
+    setMois(cible.mois);
   }
 
   const etat: EtatSauvegarde = enCours
@@ -386,7 +394,7 @@ export default function SuiviPage() {
             value={boutiqueId ?? ""}
             onChange={(e) => {
               const id = Number(e.target.value);
-              changerSelection(() => setBoutiqueId(id));
+              changerSelection({ boutiqueId: id });
             }}
           >
             <OptionsBoutiques boutiques={boutiques} />
@@ -398,7 +406,7 @@ export default function SuiviPage() {
           <div className="flex items-center gap-1">
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => changerSelection(() => setMois(moisPrecedent(mois)))}
+              onClick={() => changerSelection({ mois: moisPrecedent(mois) })}
               aria-label="Mois précédent"
             >
               ‹
@@ -409,12 +417,12 @@ export default function SuiviPage() {
               value={mois}
               onChange={(e) => {
                 const m = e.target.value || moisActuel();
-                changerSelection(() => setMois(m));
+                changerSelection({ mois: m });
               }}
             />
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => changerSelection(() => setMois(moisSuivant(mois)))}
+              onClick={() => changerSelection({ mois: moisSuivant(mois) })}
               aria-label="Mois suivant"
             >
               ›
