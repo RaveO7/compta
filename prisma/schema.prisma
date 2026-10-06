@@ -1,0 +1,68 @@
+// Schéma de la base de données — comptabilité ventes par boutique
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Boutique {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  contact   String?
+  adresse   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prix    Prix[]
+  entrees Entree[]
+}
+
+model Article {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  reference   String?
+  prixDefaut  Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prix    Prix[]
+  entrees Entree[]
+}
+
+// Prix d'un article spécifique à une boutique
+model Prix {
+  id         Int      @id @default(autoincrement())
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId  Int
+  boutique   Boutique @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  boutiqueId Int
+  valeur     Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([articleId, boutiqueId])
+}
+
+// Suivi mensuel : ce qui a été envoyé et vendu, par boutique, par article, par mois
+model Entree {
+  id         Int      @id @default(autoincrement())
+  boutique   Boutique @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  boutiqueId Int
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId  Int
+  mois       String // format "YYYY-MM"
+  envoye     Int      @default(0)
+  vendu      Int      @default(0)
+  prixUnitaire Float  @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([boutiqueId, articleId, mois])
+  @@index([mois])
+}
