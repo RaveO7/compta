@@ -15,14 +15,26 @@ export async function GET(request: Request) {
     );
   }
 
-  const [articles, prixBoutique, entrees] = await Promise.all([
+  const [articles, prixBoutique, entrees, anterieurs] = await Promise.all([
     prisma.article.findMany({ orderBy: { nom: "asc" } }),
     prisma.prix.findMany({ where: { boutiqueId } }),
     prisma.entree.findMany({ where: { boutiqueId, mois } }),
+    // Cumul des mois précédents (format YYYY-MM : l'ordre alphabétique = l'ordre chronologique)
+    prisma.entree.groupBy({
+      by: ["articleId"],
+      where: { boutiqueId, mois: { lt: mois } },
+      _sum: { envoye: true, vendu: true },
+    }),
   ]);
 
   const prixMap = new Map(prixBoutique.map((p) => [p.articleId, p.valeur]));
   const entreeMap = new Map(entrees.map((e) => [e.articleId, e]));
+  const stockMap = new Map(
+    anterieurs.map((a) => [
+      a.articleId,
+      (a._sum.envoye ?? 0) - (a._sum.vendu ?? 0),
+    ]),
+  );
 
   const lignes = articles.map((article) => {
     const entree = entreeMap.get(article.id);
@@ -36,6 +48,8 @@ export async function GET(request: Request) {
       vendu: entree?.vendu ?? 0,
       prixUnitaire: entree?.prixUnitaire ?? prixEffectif,
       saisi: Boolean(entree),
+      // Invendus restant en boutique au début du mois
+      stockAnterieur: stockMap.get(article.id) ?? 0,
     };
   });
 

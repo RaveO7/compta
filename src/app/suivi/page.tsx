@@ -15,6 +15,7 @@ type Ligne = {
   vendu: number;
   prixUnitaire: number;
   saisi: boolean;
+  stockAnterieur: number;
 };
 
 function moisPrecedent(mois: string) {
@@ -104,6 +105,10 @@ export default function SuiviPage() {
   const totalEnvoye = lignes.reduce((s, l) => s + l.envoye, 0);
   const totalVendu = lignes.reduce((s, l) => s + l.vendu, 0);
   const totalCA = lignes.reduce((s, l) => s + l.vendu * l.prixUnitaire, 0);
+  const totalInvendus = lignes.reduce(
+    (s, l) => s + l.stockAnterieur + l.envoye - l.vendu,
+    0,
+  );
 
   if (boutiques.length === 0 && !chargement) {
     return (
@@ -243,14 +248,20 @@ export default function SuiviPage() {
                 <th className="text-right">Prix unit.</th>
                 <th className="text-center">Envoyé</th>
                 <th className="text-center">Vendu</th>
-                <th className="text-center">Invendus</th>
+                <th
+                  className="text-center"
+                  title="Stock restant en boutique : total envoyé − total vendu, depuis le début jusqu'à ce mois inclus"
+                >
+                  Invendus (cumul)
+                </th>
                 <th className="text-right">CA</th>
               </tr>
             </thead>
             <tbody>
               {lignes.map((l) => {
                 const ca = l.vendu * l.prixUnitaire;
-                const invendus = l.envoye - l.vendu;
+                // Invendus cumulés en boutique (mois précédents + mois en cours)
+                const invendus = l.stockAnterieur + l.envoye - l.vendu;
                 return (
                   <tr key={l.articleId}>
                     <td>
@@ -334,7 +345,7 @@ export default function SuiviPage() {
                 <td className="text-center tabular-nums">{totalEnvoye}</td>
                 <td className="text-center tabular-nums">{totalVendu}</td>
                 <td className="text-center tabular-nums">
-                  {totalEnvoye - totalVendu}
+                  {totalInvendus}
                 </td>
                 <td className="text-right tabular-nums text-[var(--primary)]">
                   {formatMontant(totalCA)}
