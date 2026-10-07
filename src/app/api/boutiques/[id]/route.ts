@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { lireFrais } from "@/lib/frais";
+import { lireFrais, lirePaliers } from "@/lib/frais";
 
 export async function PATCH(
   request: Request,
@@ -29,6 +29,21 @@ export async function PATCH(
       );
     data.commission = v;
   }
+  for (const [champ, max] of [
+    ["paliersLoyer", Infinity],
+    ["paliersCommission", 100],
+  ] as const) {
+    if (!(champ in body)) continue;
+    const v = lirePaliers(body[champ], max);
+    if (v === null)
+      return NextResponse.json(
+        { error: "Conditions invalides : seuil > 0 et différent pour chaque condition." },
+        { status: 400 },
+      );
+    data[champ] = v;
+  }
+  if (typeof body.commissionParTranches === "boolean")
+    data.commissionParTranches = body.commissionParTranches;
 
   const boutique = await prisma.boutique.update({
     where: { id: Number(id) },

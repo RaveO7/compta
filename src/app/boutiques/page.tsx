@@ -5,7 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
 import { formatMontant } from "@/lib/format";
-import { aDesFrais, libelleFrais } from "@/lib/frais";
+import { aDesFrais, libelleFrais, paliers } from "@/lib/frais";
 
 type Boutique = {
   id: number;
@@ -16,7 +16,12 @@ type Boutique = {
   archivee: boolean;
   loyerMensuel: number;
   commission: number;
+  paliersLoyer: unknown;
+  paliersCommission: unknown;
+  commissionParTranches: boolean;
 };
+
+type PalierSaisi = { seuil: string; valeur: string };
 
 const vide = {
   nom: "",
@@ -25,7 +30,83 @@ const vide = {
   notes: "",
   loyerMensuel: "",
   commission: "",
+  paliersLoyer: [] as PalierSaisi[],
+  paliersCommission: [] as PalierSaisi[],
+  commissionParTranches: false,
 };
+
+function versSaisie(v: unknown): PalierSaisi[] {
+  return paliers(v).map((p) => ({
+    seuil: String(p.seuil),
+    valeur: String(p.valeur),
+  }));
+}
+
+// Liste de conditions « à partir de X € de ventes dans le mois → valeur »
+function EditeurConditions({
+  liste,
+  onChange,
+  unite,
+  max,
+}: {
+  liste: PalierSaisi[];
+  onChange: (l: PalierSaisi[]) => void;
+  unite: string;
+  max?: number;
+}) {
+  function modifier(i: number, champ: keyof PalierSaisi, v: string) {
+    onChange(liste.map((p, j) => (j === i ? { ...p, [champ]: v } : p)));
+  }
+  return (
+    <div className="flex flex-col gap-2 mt-2">
+      {liste.map((p, i) => (
+        <div key={i} className="flex items-center gap-2 text-sm">
+          <span className="text-[var(--muted)] shrink-0">Dès</span>
+          <input
+            className="input"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            aria-label="Seuil de ventes du mois (€)"
+            value={p.seuil}
+            onChange={(e) => modifier(i, "seuil", e.target.value)}
+            placeholder="100"
+          />
+          <span className="text-[var(--muted)] shrink-0">€ de ventes →</span>
+          <input
+            className="input"
+            type="number"
+            min="0"
+            max={max}
+            step="0.01"
+            inputMode="decimal"
+            aria-label={`Valeur appliquée (${unite})`}
+            value={p.valeur}
+            onChange={(e) => modifier(i, "valeur", e.target.value)}
+            placeholder="0"
+          />
+          <span className="text-[var(--muted)] shrink-0">{unite}</span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            aria-label="Supprimer la condition"
+            onClick={() => onChange(liste.filter((_, j) => j !== i))}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="text-sm text-[var(--primary)] self-start hover:underline"
+        onClick={() => onChange([...liste, { seuil: "", valeur: "" }])}
+      >
+        + Ajouter une condition
+      </button>
+    </div>
+  );
+}
 
 export default function BoutiquesPage() {
   const [boutiques, setBoutiques] = useState<Boutique[]>([]);
@@ -70,6 +151,9 @@ export default function BoutiquesPage() {
       notes: b.notes ?? "",
       loyerMensuel: b.loyerMensuel ? String(b.loyerMensuel) : "",
       commission: b.commission ? String(b.commission) : "",
+      paliersLoyer: versSaisie(b.paliersLoyer),
+      paliersCommission: versSaisie(b.paliersCommission),
+      commissionParTranches: b.commissionParTranches,
     });
     setOpen(true);
   }
@@ -281,52 +365,87 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               placeholder="Adresse de la boutique"
             />
           </div>
-          <fieldset>
+          <fieldset className="flex flex-col gap-4">
             <legend className="label">Frais de la boutique</legend>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-[var(--muted)]" htmlFor="loyer">
-                  Loyer mensuel (€)
-                </label>
-                <input
-                  id="loyer"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={form.loyerMensuel}
-                  onChange={(e) =>
-                    setForm({ ...form, loyerMensuel: e.target.value })
-                  }
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <label
-                  className="text-xs text-[var(--muted)]"
-                  htmlFor="commission"
-                >
-                  Commission sur ventes (%)
-                </label>
-                <input
-                  id="commission"
-                  className="input"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={form.commission}
-                  onChange={(e) =>
-                    setForm({ ...form, commission: e.target.value })
-                  }
-                  placeholder="0"
-                />
-              </div>
+            <div>
+              <label className="text-xs text-[var(--muted)]" htmlFor="loyer">
+                Loyer mensuel (€)
+              </label>
+              <input
+                id="loyer"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={form.loyerMensuel}
+                onChange={(e) =>
+                  setForm({ ...form, loyerMensuel: e.target.value })
+                }
+                placeholder="0"
+              />
+              <EditeurConditions
+                liste={form.paliersLoyer}
+                onChange={(l) => setForm({ ...form, paliersLoyer: l })}
+                unite="€ / mois"
+              />
             </div>
-            <p className="text-xs text-[var(--muted)] mt-1">
-              Laissez vide si non applicable. Les deux peuvent se cumuler.
+            <div>
+              <label
+                className="text-xs text-[var(--muted)]"
+                htmlFor="commission"
+              >
+                Commission sur ventes (%)
+              </label>
+              <input
+                id="commission"
+                className="input"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                inputMode="decimal"
+                value={form.commission}
+                onChange={(e) =>
+                  setForm({ ...form, commission: e.target.value })
+                }
+                placeholder="0"
+              />
+              <EditeurConditions
+                liste={form.paliersCommission}
+                onChange={(l) => setForm({ ...form, paliersCommission: l })}
+                unite="%"
+                max={100}
+              />
+              {form.paliersCommission.length > 0 && (
+                <label className="flex items-start gap-2 text-sm mt-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={form.commissionParTranches}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        commissionParTranches: e.target.checked,
+                      })
+                    }
+                  />
+                  <span>
+                    Appliquer chaque taux seulement à la part des ventes
+                    au-delà de son seuil
+                    <span className="block text-xs text-[var(--muted)]">
+                      Ex. 10 % dès 100 € : sur 150 € de ventes, commission de
+                      {form.commissionParTranches ? " 5 € (10 % de 50 €)" : " 15 € (10 % de 150 €)"}.
+                    </span>
+                  </span>
+                </label>
+              )}
+            </div>
+            <p className="text-xs text-[var(--muted)] -mt-2">
+              Laissez vide si non applicable. Loyer et commission peuvent se
+              cumuler. Les conditions portent sur les ventes de la boutique
+              dans le mois et remplacent la valeur de base dès que leur seuil
+              est atteint.
             </p>
           </fieldset>
           <div>

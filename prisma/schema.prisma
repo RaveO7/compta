@@ -21,6 +21,11 @@ model Boutique {
   // Frais de la boutique (cumulables) : loyer fixe par mois et/ou commission en % du CA
   loyerMensuel Float @default(0)
   commission   Float @default(0) // en %, ex : 30 pour 30 %
+  // Conditions selon le CA mensuel : [{ seuil, valeur }], ex. 10 % dès 100 € de ventes
+  paliersLoyer          Json    @default("[]")
+  paliersCommission     Json    @default("[]")
+  // Commission par tranches (chaque taux sur sa part de CA) plutôt que sur tout le CA
+  commissionParTranches Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

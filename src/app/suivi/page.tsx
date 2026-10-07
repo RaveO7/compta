@@ -5,7 +5,14 @@ import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import OptionsBoutiques from "@/components/OptionsBoutiques";
 import { formatMontant, formatMois, moisActuel } from "@/lib/format";
-import { aDesFrais, libelleFrais, montantCommission } from "@/lib/frais";
+import {
+  aDesFrais,
+  libelleFrais,
+  montantCommission,
+  montantLoyer,
+  paliers,
+  tauxCommission,
+} from "@/lib/frais";
 
 type Boutique = {
   id: number;
@@ -13,6 +20,9 @@ type Boutique = {
   archivee: boolean;
   loyerMensuel: number;
   commission: number;
+  paliersLoyer: unknown;
+  paliersCommission: unknown;
+  commissionParTranches: boolean;
 };
 type Ligne = {
   articleId: number;
@@ -353,8 +363,13 @@ export default function SuiviPage() {
     0,
   );
   const boutique = boutiques.find((b) => b.id === boutiqueId);
-  const loyer = boutique?.loyerMensuel ?? 0;
+  const loyer = boutique ? montantLoyer(totalCA, boutique) : 0;
   const commission = boutique ? montantCommission(totalCA, boutique) : 0;
+  // Libellé de la commission : taux du palier atteint, sauf calcul par tranches
+  const libelleCommission =
+    boutique?.commissionParTranches && paliers(boutique.paliersCommission).length
+      ? "Commission"
+      : `${(boutique ? tauxCommission(totalCA, boutique) : 0).toLocaleString("fr-FR")} %`;
   const envoi = Number(envoiSaisie.replace(",", ".")) || 0;
   const totalFrais = loyer + commission + envoi;
   // Frais de fabrication (matériel) des articles vendus ce mois-ci
@@ -514,8 +529,8 @@ export default function SuiviPage() {
             {boutique && (aDesFrais(boutique) || envoi > 0)
               ? [
                   loyer > 0 && `Loyer ${formatMontant(loyer)}`,
-                  boutique.commission > 0 &&
-                    `${boutique.commission.toLocaleString("fr-FR")} % : ${formatMontant(commission)}`,
+                  commission > 0 &&
+                    `${libelleCommission} : ${formatMontant(commission)}`,
                   envoi > 0 && `Envoi ${formatMontant(envoi)}`,
                 ]
                   .filter(Boolean)

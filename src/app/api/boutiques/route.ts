@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { lireFrais } from "@/lib/frais";
+import { lireFrais, lirePaliers } from "@/lib/frais";
 
 // Par défaut : boutiques actives uniquement. `?toutes=1` inclut les archivées.
 export async function GET(request: Request) {
@@ -26,10 +26,21 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  const paliersLoyer = lirePaliers(body.paliersLoyer);
+  const paliersCommission = lirePaliers(body.paliersCommission, 100);
+  if (paliersLoyer === null || paliersCommission === null) {
+    return NextResponse.json(
+      { error: "Conditions invalides : seuil > 0 et différent pour chaque condition." },
+      { status: 400 },
+    );
+  }
   const boutique = await prisma.boutique.create({
     data: {
       loyerMensuel,
       commission,
+      paliersLoyer,
+      paliersCommission,
+      commissionParTranches: body.commissionParTranches === true,
       nom,
       contact: body.contact?.trim() || null,
       adresse: body.adresse?.trim() || null,

@@ -13,7 +13,7 @@ import {
   GraphiqueFluxStock,
   GraphiqueStockArticles,
 } from "@/components/DashboardCharts";
-import { montantCommission } from "@/lib/frais";
+import { montantCommission, montantLoyer } from "@/lib/frais";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +66,7 @@ export default async function DashboardPage({
     categoriesDb,
     aSansCategorie,
     fraisEnvois,
+    entreesToutesCategories,
   ] = await Promise.all([
       prisma.entree.findMany({
         where: { article: filtreArticle },
@@ -84,6 +85,13 @@ export default async function DashboardPage({
       categorie
         ? Promise.resolve([])
         : prisma.fraisEnvoi.findMany({ include: { boutique: true } }),
+      // Les conditions de frais dépendent du CA total de la boutique dans le
+      // mois : avec un filtre de catégorie, il faut aussi les autres ventes
+      categorie
+        ? prisma.entree.findMany({
+            select: { boutiqueId: true, mois: true, vendu: true, prixUnitaire: true },
+          })
+        : Promise.resolve(null),
     ]);
   const categories = categoriesDb
     .map((c) => c.categorie)
@@ -121,13 +129,25 @@ export default async function DashboardPage({
     { ca: number; vendu: number; envoye: number }
   >();
 
+  // CA de chaque boutique par mois (toutes catégories), base des conditions de frais
+  const caBoutiqueMois = new Map<string, number>();
+  for (const e of entreesToutesCategories ?? entrees) {
+    const cle = `${e.boutiqueId}|${e.mois}`;
+    caBoutiqueMois.set(cle, (caBoutiqueMois.get(cle) ?? 0) + e.vendu * e.prixUnitaire);
+  }
+
   for (const e of entrees) {
     const ca = e.vendu * e.prixUnitaire;
-    let frais = montantCommission(ca, e.boutique);
     const cleLoyer = `${e.boutiqueId}|${e.mois}`;
+    // Commission du mois répartie sur chaque ligne au prorata de son CA
+    const caMoisBoutique = caBoutiqueMois.get(cleLoyer) ?? 0;
+    let frais =
+      caMoisBoutique > 0
+        ? (montantCommission(caMoisBoutique, e.boutique) * ca) / caMoisBoutique
+        : 0;
     if (!categorie && !moisAvecLoyer.has(cleLoyer)) {
       moisAvecLoyer.add(cleLoyer);
-      frais += e.boutique.loyerMensuel;
+      frais += montantLoyer(caMoisBoutique, e.boutique);
     }
     fraisTotal += frais;
     if (e.mois === moisCourant) fraisMois += frais;
