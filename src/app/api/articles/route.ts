@@ -5,7 +5,7 @@ import { lireFrais } from "@/lib/frais";
 export async function GET() {
   const articles = await prisma.article.findMany({
     orderBy: { nom: "asc" },
-    include: { prix: true },
+    include: { prix: true, references: true },
   });
   return NextResponse.json(articles);
 }

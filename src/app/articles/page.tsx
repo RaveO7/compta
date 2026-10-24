@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
-import { formatMontant } from "@/lib/format";
+import { correspond, formatMontant } from "@/lib/format";
 
 type Prix = { id: number; boutiqueId: number; valeur: number };
+type ReferenceBoutique = { id: number; boutiqueId: number; valeur: string };
 type Article = {
   id: number;
   nom: string;
@@ -15,6 +16,7 @@ type Article = {
   prixDefaut: number;
   coutUnitaire: number;
   prix: Prix[];
+  references: ReferenceBoutique[];
 };
 type Boutique = { id: number; nom: string };
 
@@ -40,13 +42,16 @@ export default function ArticlesPage() {
   const [form, setForm] = useState(vide);
   const [enregistrement, setEnregistrement] = useState(false);
 
-  // Modal des prix par boutique
+  // Modal des prix et références par boutique
   const [prixOpen, setPrixOpen] = useState(false);
   const [articlePrix, setArticlePrix] = useState<Article | null>(null);
   const [prixForm, setPrixForm] = useState<Record<number, string>>({});
+  const [refForm, setRefForm] = useState<Record<number, string>>({});
 
   // Filtre par catégorie ("" = toutes)
   const [filtre, setFiltre] = useState("");
+  // Recherche par nom, référence interne ou référence boutique
+  const [recherche, setRecherche] = useState("");
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -97,13 +102,24 @@ export default function ArticlesPage() {
       ? filtre
       : "";
 
-  const articlesFiltres = articles.filter((a) =>
-    filtreActif === ""
-      ? true
-      : filtreActif === SANS_CATEGORIE
-        ? !a.categorie
-        : a.categorie === filtreActif,
-  );
+  const nomsBoutiques = new Map(boutiques.map((b) => [b.id, b.nom]));
+
+  const articlesFiltres = articles.filter((a) => {
+    const categorieOk =
+      filtreActif === ""
+        ? true
+        : filtreActif === SANS_CATEGORIE
+          ? !a.categorie
+          : a.categorie === filtreActif;
+    return (
+      categorieOk &&
+      correspond(recherche, [
+        a.nom,
+        a.reference,
+        ...a.references.map((r) => r.valeur),
+      ])
+    );
+  });
 
   function recuperer(): Promise<[Article[], Boutique[]]> {
     return Promise.all([
@@ -189,11 +205,15 @@ export default function ArticlesPage() {
   function ouvrirPrix(a: Article) {
     setArticlePrix(a);
     const init: Record<number, string> = {};
+    const refs: Record<number, string> = {};
     for (const boutique of boutiques) {
       const p = a.prix.find((x) => x.boutiqueId === boutique.id);
       init[boutique.id] = p ? String(p.valeur) : "";
+      const r = a.references.find((x) => x.boutiqueId === boutique.id);
+      refs[boutique.id] = r?.valeur ?? "";
     }
     setPrixForm(init);
+    setRefForm(refs);
     setPrixOpen(true);
   }
 
@@ -221,6 +241,27 @@ export default function ArticlesPage() {
         });
       }),
     );
+    // Références : seules celles modifiées sont envoyées (vide = suppression)
+    await Promise.all(
+      boutiques
+        .filter((boutique) => {
+          const avant =
+            articlePrix.references.find((r) => r.boutiqueId === boutique.id)
+              ?.valeur ?? "";
+          return (refForm[boutique.id] ?? "").trim() !== avant;
+        })
+        .map((boutique) =>
+          fetch("/api/references", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              articleId: articlePrix.id,
+              boutiqueId: boutique.id,
+              valeur: refForm[boutique.id] ?? "",
+            }),
+          }),
+        ),
+    );
     setEnregistrement(false);
     setPrixOpen(false);
     await charger();
@@ -230,7 +271,7 @@ export default function ArticlesPage() {
     <div>
       <PageHeader
         titre="Articles"
-        sousTitre="Vos produits, leurs prix (un prix par défaut, ajustable par boutique) et leurs frais de fabrication."
+        sousTitre="Vos produits, leurs prix (un prix par défaut, ajustable par boutique), leurs références et leurs frais de fabrication."
         action={
           <button className="btn btn-primary" onClick={ouvrirAjout}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -253,6 +294,16 @@ export default function ArticlesPage() {
         />
       ) : (
         <>
+          <div className="mb-4 max-w-md">
+            <input
+              type="search"
+              className="input"
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder="Rechercher un article ou une référence…"
+              aria-label="Rechercher un article ou une référence"
+            />
+          </div>
           {categories.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               <button
@@ -306,7 +357,20 @@ export default function ArticlesPage() {
                       )}
                     </td>
                     <td className="text-[var(--muted)]">
-                      {a.reference || "—"}
+                      {a.reference || (a.references.length === 0 && "—")}
+                      {a.references.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {a.references.map((r) => (
+                            <span
+                              key={r.id}
+                              className="badge badge-muted"
+                              title={nomsBoutiques.get(r.boutiqueId)}
+                            >
+                              {r.valeur}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="text-right font-semibold tabular-nums">
                       {formatMontant(a.prixDefaut)}
@@ -339,10 +403,10 @@ export default function ArticlesPage() {
                           title={
                             boutiques.length === 0
                               ? "Ajoutez d'abord une boutique"
-                              : "Prix par boutique"
+                              : "Prix et références par boutique"
                           }
                         >
-                          Prix / boutique
+                          Par boutique
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -362,6 +426,11 @@ export default function ArticlesPage() {
                 ))}
               </tbody>
             </table>
+            {articlesFiltres.length === 0 && (
+              <p className="p-4 text-sm text-[var(--muted)]">
+                Aucun article ne correspond à la recherche.
+              </p>
+            )}
           </div>
         </>
       )}
@@ -465,6 +534,10 @@ export default function ArticlesPage() {
               onChange={(e) => setForm({ ...form, reference: e.target.value })}
               placeholder="Code / référence interne (optionnel)"
             />
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Les références propres à chaque boutique se saisissent via
+              « Par boutique ».
+            </p>
           </div>
           <div>
             <label className="label">Prix par défaut (€)</label>
@@ -519,23 +592,37 @@ export default function ArticlesPage() {
         </form>
       </Modal>
 
-      {/* Modal prix par boutique */}
+      {/* Modal prix et références par boutique */}
       <Modal
         open={prixOpen}
         onClose={() => setPrixOpen(false)}
-        title={`Prix par boutique — ${articlePrix?.nom ?? ""}`}
+        title={`Par boutique — ${articlePrix?.nom ?? ""}`}
       >
         <p className="text-sm text-[var(--muted)] mb-4">
-          Laissez vide pour utiliser le prix par défaut (
-          {formatMontant(articlePrix?.prixDefaut ?? 0)}).
+          Une référence par boutique (le code utilisé par le magasin). Prix
+          vide = prix par défaut ({formatMontant(articlePrix?.prixDefaut ?? 0)}).
         </p>
         <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3 text-xs font-medium uppercase text-[var(--muted)]">
+            <span className="flex-1">Boutique</span>
+            <span className="w-36">Référence</span>
+            <span className="w-28">Prix</span>
+          </div>
           {boutiques.map((boutique) => (
             <div key={boutique.id} className="flex items-center gap-3">
               <span className="flex-1 font-medium truncate">
                 {boutique.nom}
               </span>
-              <div className="relative w-36">
+              <input
+                className="input w-36"
+                value={refForm[boutique.id] ?? ""}
+                onChange={(e) =>
+                  setRefForm({ ...refForm, [boutique.id]: e.target.value })
+                }
+                placeholder="—"
+                aria-label={`Référence chez ${boutique.nom}`}
+              />
+              <div className="relative w-28">
                 <input
                   className="input pr-7"
                   type="number"
@@ -571,7 +658,7 @@ export default function ArticlesPage() {
             onClick={enregistrerPrix}
             disabled={enregistrement}
           >
-            {enregistrement ? "Enregistrement…" : "Enregistrer les prix"}
+            {enregistrement ? "Enregistrement…" : "Enregistrer"}
           </button>
         </div>
       </Modal>

@@ -18,7 +18,6 @@ type Boutique = {
   commission: number;
   paliersLoyer: unknown;
   paliersCommission: unknown;
-  commissionParTranches: boolean;
 };
 
 type PalierSaisi = { seuil: string; valeur: string };
@@ -32,7 +31,6 @@ const vide = {
   commission: "",
   paliersLoyer: [] as PalierSaisi[],
   paliersCommission: [] as PalierSaisi[],
-  commissionParTranches: false,
 };
 
 function versSaisie(v: unknown): PalierSaisi[] {
@@ -153,7 +151,6 @@ export default function BoutiquesPage() {
       commission: b.commission ? String(b.commission) : "",
       paliersLoyer: versSaisie(b.paliersLoyer),
       paliersCommission: versSaisie(b.paliersCommission),
-      commissionParTranches: b.commissionParTranches,
     });
     setOpen(true);
   }
@@ -418,34 +415,18 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
                 max={100}
               />
               {form.paliersCommission.length > 0 && (
-                <label className="flex items-start gap-2 text-sm mt-2">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={form.commissionParTranches}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        commissionParTranches: e.target.checked,
-                      })
-                    }
-                  />
-                  <span>
-                    Appliquer chaque taux seulement à la part des ventes
-                    au-delà de son seuil
-                    <span className="block text-xs text-[var(--muted)]">
-                      Ex. 10 % dès 100 € : sur 150 € de ventes, commission de
-                      {form.commissionParTranches ? " 5 € (10 % de 50 €)" : " 15 € (10 % de 150 €)"}.
-                    </span>
-                  </span>
-                </label>
+                <p className="text-xs text-[var(--muted)] mt-2">
+                  Chaque taux s&apos;applique seulement à la part des ventes
+                  au-delà de son seuil. Ex. 0 % de base et 10 % dès 100 € : sur
+                  150 € de ventes, commission de 5 € (10 % de 50 €).
+                </p>
               )}
             </div>
             <p className="text-xs text-[var(--muted)] -mt-2">
               Laissez vide si non applicable. Loyer et commission peuvent se
               cumuler. Les conditions portent sur les ventes de la boutique
-              dans le mois et remplacent la valeur de base dès que leur seuil
-              est atteint.
+              dans le mois. Pour le loyer, la valeur de la condition remplace
+              celle de base dès que son seuil est atteint.
             </p>
           </fieldset>
           <div>

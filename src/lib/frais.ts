@@ -1,6 +1,6 @@
 // Frais d'une boutique : loyer fixe mensuel et/ou commission (% du CA), cumulables.
 // Chacun peut avoir des conditions (paliers) selon le CA mensuel de la boutique :
-// ex. commission 0 % de base, puis 10 % à partir de 100 € de ventes dans le mois.
+// ex. commission 0 % de base, puis 10 % sur la part des ventes du mois au-delà de 100 €.
 export type Palier = { seuil: number; valeur: number };
 
 export type FraisBoutique = {
@@ -8,9 +8,6 @@ export type FraisBoutique = {
   commission: number;
   paliersLoyer?: unknown;
   paliersCommission?: unknown;
-  // false : le taux du palier atteint s'applique à tout le CA du mois
-  // true  : chaque taux ne s'applique qu'à la part du CA dans sa tranche
-  commissionParTranches?: boolean;
 };
 
 // Paliers valides, triés par seuil croissant (tolère une valeur JSON brute)
@@ -40,18 +37,11 @@ export function montantLoyer(caMensuel: number, b: FraisBoutique): number {
   return valeurAtteinte(caMensuel, b.loyerMensuel, paliers(b.paliersLoyer));
 }
 
-// Taux de commission du palier atteint (hors mode par tranches)
-export function tauxCommission(caMensuel: number, b: FraisBoutique): number {
-  return valeurAtteinte(caMensuel, b.commission, paliers(b.paliersCommission));
-}
-
-// Commission due pour un mois, calculée sur le CA total de la boutique ce mois-là
+// Commission due pour un mois, calculée par tranches sur le CA de la boutique :
+// [0 ; seuil1[ au taux de base, [seuil1 ; seuil2[ au taux 1…
+// Ex. 0 % de base, 10 % dès 100 € : sur 150 € de ventes → 10 % de 50 € = 5 €.
 export function montantCommission(caMensuel: number, b: FraisBoutique): number {
   const liste = paliers(b.paliersCommission);
-  if (!b.commissionParTranches || liste.length === 0) {
-    return (caMensuel * tauxCommission(caMensuel, b)) / 100;
-  }
-  // Par tranches : [0 ; seuil1[ au taux de base, [seuil1 ; seuil2[ au taux 1…
   const bornes = [{ seuil: 0, valeur: b.commission || 0 }, ...liste];
   let total = 0;
   bornes.forEach((p, i) => {
@@ -97,12 +87,11 @@ export function libelleFrais(
       ...(b.commission > 0 || pc.length === 0
         ? [`${pct(b.commission)} des ventes`]
         : []),
-      ...pc.map((p) => `${pct(p.valeur)} dès ${formatMontant(p.seuil)} de ventes`),
+      ...pc.map(
+        (p) => `${pct(p.valeur)} au-delà de ${formatMontant(p.seuil)} de ventes`,
+      ),
     ];
-    parts.push(
-      `Commission ${morceaux.join(", ")}` +
-        (b.commissionParTranches && pc.length ? " (par tranches)" : ""),
-    );
+    parts.push(`Commission ${morceaux.join(", ")}`);
   }
   return parts.length ? parts.join(" + ") : "Aucun frais";
 }

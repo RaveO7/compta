@@ -4,14 +4,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import OptionsBoutiques from "@/components/OptionsBoutiques";
-import { formatMontant, formatMois, moisActuel } from "@/lib/format";
+import {
+  correspond,
+  formatMontant,
+  formatMois,
+  moisActuel,
+} from "@/lib/format";
 import {
   aDesFrais,
   libelleFrais,
   montantCommission,
   montantLoyer,
   paliers,
-  tauxCommission,
 } from "@/lib/frais";
 
 type Boutique = {
@@ -22,12 +26,12 @@ type Boutique = {
   commission: number;
   paliersLoyer: unknown;
   paliersCommission: unknown;
-  commissionParTranches: boolean;
 };
 type Ligne = {
   articleId: number;
   nom: string;
   reference: string | null;
+  referenceBoutique: string | null;
   prixEffectif: number;
   coutUnitaire: number;
   envoye: number;
@@ -117,6 +121,8 @@ export default function SuiviPage() {
   const [envoiSaisie, setEnvoiSaisie] = useState("");
   const [envoiEnregistre, setEnvoiEnregistre] = useState(0);
   const [envoiEtat, setEnvoiEtat] = useState<"ok" | "enCours" | "erreur">("ok");
+  // Recherche par nom ou référence (n'affecte pas les totaux)
+  const [recherche, setRecherche] = useState("");
 
   // Lignes affichées + la boutique/le mois auxquels elles appartiennent :
   // un enregistrement part toujours vers le mois des lignes, jamais vers un
@@ -365,16 +371,20 @@ export default function SuiviPage() {
   const boutique = boutiques.find((b) => b.id === boutiqueId);
   const loyer = boutique ? montantLoyer(totalCA, boutique) : 0;
   const commission = boutique ? montantCommission(totalCA, boutique) : 0;
-  // Libellé de la commission : taux du palier atteint, sauf calcul par tranches
+  // Libellé de la commission : taux unique, ou "Commission" si calcul par tranches
   const libelleCommission =
-    boutique?.commissionParTranches && paliers(boutique.paliersCommission).length
+    boutique && paliers(boutique.paliersCommission).length
       ? "Commission"
-      : `${(boutique ? tauxCommission(totalCA, boutique) : 0).toLocaleString("fr-FR")} %`;
+      : `${(boutique?.commission ?? 0).toLocaleString("fr-FR")} %`;
   const envoi = Number(envoiSaisie.replace(",", ".")) || 0;
   const totalFrais = loyer + commission + envoi;
   // Frais de fabrication (matériel) des articles vendus ce mois-ci
   const totalMateriel = lignes.reduce((s, l) => s + l.vendu * l.coutUnitaire, 0);
   const net = totalCA - totalFrais - totalMateriel;
+
+  const lignesAffichees = lignes.filter((l) =>
+    correspond(recherche, [l.nom, l.reference, l.referenceBoutique]),
+  );
 
   if (boutiques.length === 0 && !chargement) {
     return (
@@ -566,12 +576,22 @@ export default function SuiviPage() {
         </div>
       </div>
 
-      <p className="text-sm text-[var(--muted)] mb-3">
-        {formatMois(mois)} —{" "}
-        {boutique?.nom}
-        {boutique?.archivee &&
-          " (boutique archivée)"}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <p className="text-sm text-[var(--muted)]">
+          {formatMois(mois)} —{" "}
+          {boutique?.nom}
+          {boutique?.archivee &&
+            " (boutique archivée)"}
+        </p>
+        <input
+          type="search"
+          className="input max-w-xs"
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Rechercher un article ou une référence…"
+          aria-label="Rechercher un article ou une référence"
+        />
+      </div>
 
       {chargement ? (
         <p className="text-[var(--muted)]">Chargement…</p>
@@ -604,7 +624,14 @@ export default function SuiviPage() {
               </tr>
             </thead>
             <tbody>
-              {lignes.map((l) => {
+              {lignesAffichees.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-sm text-[var(--muted)]">
+                    Aucun article ne correspond à la recherche.
+                  </td>
+                </tr>
+              )}
+              {lignesAffichees.map((l) => {
                 const ca = l.vendu * l.prixUnitaire;
                 // Invendus cumulés en boutique (mois précédents + mois en cours)
                 const invendus = l.stockAnterieur + l.envoye - l.vendu;
@@ -628,9 +655,11 @@ export default function SuiviPage() {
                           />
                         )}
                       </p>
-                      {l.reference && (
+                      {(l.referenceBoutique || l.reference) && (
                         <p className="text-xs text-[var(--muted)]">
-                          {l.reference}
+                          {[l.referenceBoutique, l.reference]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </p>
                       )}
                     </td>

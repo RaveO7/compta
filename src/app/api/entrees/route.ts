@@ -15,9 +15,10 @@ export async function GET(request: Request) {
     );
   }
 
-  const [articles, prixBoutique, entrees, anterieurs] = await Promise.all([
+  const [articles, prixBoutique, referencesBoutique, entrees, anterieurs] = await Promise.all([
     prisma.article.findMany({ orderBy: { nom: "asc" } }),
     prisma.prix.findMany({ where: { boutiqueId } }),
+    prisma.referenceBoutique.findMany({ where: { boutiqueId } }),
     prisma.entree.findMany({ where: { boutiqueId, mois } }),
     // Cumul des mois précédents (format YYYY-MM : l'ordre alphabétique = l'ordre chronologique)
     prisma.entree.groupBy({
@@ -28,6 +29,9 @@ export async function GET(request: Request) {
   ]);
 
   const prixMap = new Map(prixBoutique.map((p) => [p.articleId, p.valeur]));
+  const referenceMap = new Map(
+    referencesBoutique.map((r) => [r.articleId, r.valeur]),
+  );
   const entreeMap = new Map(entrees.map((e) => [e.articleId, e]));
   const stockMap = new Map(
     anterieurs.map((a) => [
@@ -43,6 +47,8 @@ export async function GET(request: Request) {
       articleId: article.id,
       nom: article.nom,
       reference: article.reference,
+      // Référence propre à la boutique (code utilisé par le magasin)
+      referenceBoutique: referenceMap.get(article.id) ?? null,
       prixEffectif,
       coutUnitaire: article.coutUnitaire,
       envoye: entree?.envoye ?? 0,

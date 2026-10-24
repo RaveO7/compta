@@ -1,10 +1,13 @@
 import { config } from "dotenv";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaNeon } from "@prisma/adapter-neon";
+import { neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+neonConfig.webSocketConstructor = ws;
+const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 function moisIlYA(n: number): string {

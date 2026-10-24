@@ -43,6 +43,22 @@ export function formatMoisCourt(mois: string): string {
   return `${NOMS_MOIS[index].slice(0, 4)} ${annee.slice(2)}`;
 }
 
+// Texte comparable pour la recherche : sans casse ni accents
+export function normaliser(texte: string): string {
+  return texte
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLocaleLowerCase("fr");
+}
+
+// Vrai si chaque mot de la recherche apparaît dans l'un des champs
+export function correspond(recherche: string, champs: (string | null)[]) {
+  const termes = normaliser(recherche).split(/\s+/).filter(Boolean);
+  if (termes.length === 0) return true;
+  const texte = normaliser(champs.filter(Boolean).join(" "));
+  return termes.every((t) => texte.includes(t));
+}
+
 export function moisActuel(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

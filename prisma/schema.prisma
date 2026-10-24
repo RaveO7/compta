@@ -32,6 +32,7 @@ model Boutique {
   prix       Prix[]
   entrees    Entree[]
   fraisEnvoi FraisEnvoi[]
+  references ReferenceBoutique[]
 }
 
 model Article {
@@ -45,8 +46,9 @@ model Article {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  prix    Prix[]
-  entrees Entree[]
+  prix       Prix[]
+  entrees    Entree[]
+  references ReferenceBoutique[]
 
   @@index([categorie])
 }
@@ -63,6 +65,21 @@ model Prix {
   updatedAt  DateTime @updatedAt
 
   @@unique([articleId, boutiqueId])
+}
+
+// Référence d'un article chez une boutique (chaque boutique peut avoir son propre code)
+model ReferenceBoutique {
+  id         Int      @id @default(autoincrement())
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId  Int
+  boutique   Boutique @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  boutiqueId Int
+  valeur     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([articleId, boutiqueId])
+  @@index([valeur])
 }
 
 // Suivi mensuel : ce qui a été envoyé et vendu, par boutique, par article, par mois
