@@ -605,24 +605,26 @@ export default function ArticlesPage() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3 text-xs font-medium uppercase text-[var(--muted)]">
             <span className="flex-1">Boutique</span>
-            <span className="w-36">Référence</span>
-            <span className="w-28">Prix</span>
+            <span className="w-36 shrink-0">Référence</span>
+            <span className="w-28 shrink-0">Prix</span>
           </div>
           {boutiques.map((boutique) => (
             <div key={boutique.id} className="flex items-center gap-3">
-              <span className="flex-1 font-medium truncate">
+              <span className="flex-1 min-w-0 font-medium truncate">
                 {boutique.nom}
               </span>
-              <input
-                className="input w-36"
-                value={refForm[boutique.id] ?? ""}
-                onChange={(e) =>
-                  setRefForm({ ...refForm, [boutique.id]: e.target.value })
-                }
-                placeholder="—"
-                aria-label={`Référence chez ${boutique.nom}`}
-              />
-              <div className="relative w-28">
+              <div className="w-36 shrink-0">
+                <input
+                  className="input"
+                  value={refForm[boutique.id] ?? ""}
+                  onChange={(e) =>
+                    setRefForm({ ...refForm, [boutique.id]: e.target.value })
+                  }
+                  placeholder="—"
+                  aria-label={`Référence chez ${boutique.nom}`}
+                />
+              </div>
+              <div className="relative w-28 shrink-0">
                 <input
                   className="input pr-7"
                   type="number"

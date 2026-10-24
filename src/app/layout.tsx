@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
-import MobileNav from "@/components/MobileNav";
 import ThemeScript from "@/components/ThemeScript";
 
 const geistSans = Geist({
@@ -30,17 +28,7 @@ export default function RootLayout({
       <head>
         <ThemeScript />
       </head>
-      <body className="min-h-full">
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <div className="flex flex-1 flex-col min-w-0">
-            <MobileNav />
-            <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1400px] w-full mx-auto">
-              {children}
-            </main>
-          </div>
-        </div>
-      </body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }

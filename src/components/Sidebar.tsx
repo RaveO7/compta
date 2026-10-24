@@ -12,7 +12,7 @@ const liens = [
   { href: "/articles", label: "Articles", icon: "M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ deconnexion }: { deconnexion: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -58,10 +58,10 @@ export default function Sidebar() {
       </nav>
 
       <div className="mt-auto px-2 pt-4">
-        <ThemeToggle />
-        <p className="mt-3 text-xs text-[var(--muted)]">
-          Données enregistrées en local
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <ThemeToggle />
+          {deconnexion}
+        </div>
       </div>
     </aside>
   );

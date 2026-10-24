@@ -12,7 +12,7 @@ const liens = [
   { href: "/articles", label: "Articles" },
 ];
 
-export default function MobileNav() {
+export default function MobileNav({ deconnexion }: { deconnexion: React.ReactNode }) {
   const pathname = usePathname();
   return (
     <header className="md:hidden sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]">
@@ -21,8 +21,9 @@ export default function MobileNav() {
           €
         </div>
         <p className="font-bold">Ma Compta</p>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
+          {deconnexion}
         </div>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
