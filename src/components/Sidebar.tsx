@@ -9,6 +9,7 @@ const liens = [
   { href: "/", label: "Vue d'ensemble", icon: "M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z" },
   { href: "/suivi", label: "Suivi mensuel", icon: "M7 2v2M17 2v2M3 8h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3 9h2v2H8v-2Zm6 0h2v2h-2v-2Z" },
   { href: "/stock", label: "Stock & bilan", icon: "M3 3h18v4H3V3Zm2 4v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M9 11h6" },
+  { href: "/maison", label: "Stock maison", icon: "M3 10.5 12 3l9 7.5M5 9v11h14V9M10 20v-6h4v6" },
   { href: "/boutiques", label: "Boutiques", icon: "M3 9l1-5h16l1 5M4 9v11h16V9M9 13h6v7H9v-7Z" },
   { href: "/articles", label: "Articles", icon: "M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
 ];

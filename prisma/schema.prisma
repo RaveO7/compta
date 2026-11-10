@@ -53,6 +53,7 @@ model Article {
   prix       Prix[]
   entrees    Entree[]
   references ReferenceBoutique[]
+  mouvements MouvementMaison[]
 
   @@index([categorie])
 }
@@ -115,4 +116,23 @@ model FraisEnvoi {
   updatedAt  DateTime @updatedAt
 
   @@unique([boutiqueId, mois])
+}
+
+// Mouvements du stock à la maison. Les envois en boutique n'y figurent pas :
+// ils sont déjà saisis dans le suivi mensuel (Entree.envoye) et déduits au calcul.
+// Stock à la maison = somme des quantités − total envoyé en boutique.
+model MouvementMaison {
+  id        Int      @id @default(autoincrement())
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId Int
+  date      DateTime @default(now()) @db.Date
+  // "fabrication" (+), "sortie" (− : vente directe, don, casse…)
+  // ou "inventaire" (± : écart entre le stock compté et le stock calculé)
+  type      String
+  quantite  Int // signée : positive = entre dans le stock, négative = en sort
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([articleId])
+  @@index([date])
 }

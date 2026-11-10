@@ -8,6 +8,7 @@ const liens = [
   { href: "/", label: "Vue d'ensemble" },
   { href: "/suivi", label: "Suivi" },
   { href: "/stock", label: "Stock" },
+  { href: "/maison", label: "Maison" },
   { href: "/boutiques", label: "Boutiques" },
   { href: "/articles", label: "Articles" },
 ];
