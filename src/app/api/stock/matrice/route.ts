@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { statutBoutique } from "@/lib/periode";
 
 // Stock restant (envoyé - vendu) par article ET par boutique.
 // Permet une vue d'ensemble en un coup d'œil : articles en lignes, boutiques en colonnes.
@@ -50,9 +51,12 @@ export async function GET() {
     totalGeneral += l.total;
   }
 
-  // Les boutiques archivées n'apparaissent que s'il y reste du stock
+  // Les boutiques fermées n'apparaissent que s'il y reste du stock
+  const fermees = new Set(
+    boutiques.filter((b) => statutBoutique(b) === "fermee").map((b) => b.id),
+  );
   const visibles = boutiques.filter(
-    (b) => !b.archivee || totauxParBoutique[b.id] !== 0,
+    (b) => !fermees.has(b.id) || totauxParBoutique[b.id] !== 0,
   );
   totauxParBoutique = Object.fromEntries(
     visibles.map((b) => [b.id, totauxParBoutique[b.id]]),
@@ -62,7 +66,7 @@ export async function GET() {
     boutiques: visibles.map((b) => ({
       id: b.id,
       nom: b.nom,
-      archivee: b.archivee,
+      fermee: fermees.has(b.id),
     })),
     lignes,
     totauxParBoutique,

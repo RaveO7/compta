@@ -10,10 +10,12 @@ import {
 import {
   GraphiqueMensuel,
   GraphiqueBoutiques,
+  GraphiqueBoutiquesBenefice,
   GraphiqueFluxStock,
   GraphiqueStockArticles,
 } from "@/components/DashboardCharts";
 import { montantCommission, montantLoyer } from "@/lib/frais";
+import { aujourdhui, lireDate } from "@/lib/periode";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,9 @@ export default async function DashboardPage({
       ? {}
       : { categorie: categorie === SANS_CATEGORIE ? null : categorie };
 
+  // Boutiques ouvertes aujourd'hui (ni à venir, ni fermées)
+  const jourCourant = lireDate(aujourdhui())!;
+
   const [
     entrees,
     nbBoutiques,
@@ -72,7 +77,12 @@ export default async function DashboardPage({
         where: { article: filtreArticle },
         include: { boutique: true, article: true },
       }),
-      prisma.boutique.count({ where: { archivee: false } }),
+      prisma.boutique.count({
+        where: {
+          dateDebut: { lte: jourCourant },
+          OR: [{ dateFin: null }, { dateFin: { gte: jourCourant } }],
+        },
+      }),
       prisma.article.count({ where: filtreArticle }),
       prisma.article.findMany({
         where: { categorie: { not: null } },
@@ -298,7 +308,9 @@ export default async function DashboardPage({
         <StatCard
           titre="CA total"
           valeur={formatMontant(caTotal)}
-          sousTitre={`${venduTotal} articles vendus`}
+          sousTitre={`${venduTotal} articles vendus · ${formatMontant(
+            venduTotal ? caTotal / venduTotal : 0,
+          )} en moyenne`}
           accent
         />
         <StatCard
@@ -309,7 +321,7 @@ export default async function DashboardPage({
         <StatCard
           titre="Boutiques"
           valeur={String(nbBoutiques)}
-          sousTitre="Points de vente"
+          sousTitre="Ouvertes actuellement"
         />
         <StatCard
           titre={categorie ? `Articles · ${libelleFiltre ?? categorie}` : "Articles"}
@@ -390,8 +402,10 @@ export default async function DashboardPage({
             </div>
             <div className="card p-5">
               <h2 className="font-semibold mb-1">CA par boutique</h2>
-              <p className="text-sm text-[var(--muted)] mb-4">Depuis le début</p>
-              <GraphiqueBoutiques data={parBoutique} />
+              <p className="text-sm text-[var(--muted)] mb-4">
+                Depuis le début (bleu : bénéfice, barre entière : CA)
+              </p>
+              <GraphiqueBoutiquesBenefice data={parBoutique} />
             </div>
           </div>
 

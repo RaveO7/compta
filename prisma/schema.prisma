@@ -16,8 +16,12 @@ model Boutique {
   contact   String?
   adresse   String?
   notes     String?
-  // Boutique fermée / plus active : masquée du suivi mensuel, historique conservé
-  archivee  Boolean  @default(false)
+  // Période d'activité : le suivi mensuel n'est possible que sur les mois
+  // compris entre l'ouverture et la fermeture (incluses). Sans date de fin,
+  // la boutique reste ouverte. Une fois la date de fin passée, elle est fermée
+  // (historique conservé).
+  dateDebut DateTime  @default(now()) @db.Date
+  dateFin   DateTime? @db.Date
   // Frais de la boutique (cumulables) : loyer fixe par mois et/ou commission en % du CA
   loyerMensuel Float @default(0)
   commission   Float @default(0) // en %, ex : 30 pour 30 %

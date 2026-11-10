@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { lireFrais } from "@/lib/frais";
+import { formatMois } from "@/lib/format";
+import { moisDansPeriode } from "@/lib/periode";
 
 function lireCle(boutiqueId: unknown, mois: unknown) {
   const id = Number(boutiqueId);
@@ -41,6 +43,23 @@ export async function PUT(request: Request) {
       .catch(() => null);
     return NextResponse.json({ montant: 0 });
   }
+  // Pas de saisie hors de la période d'ouverture de la boutique
+  const boutique = await prisma.boutique.findUnique({
+    where: { id: cle.boutiqueId },
+    select: { dateDebut: true, dateFin: true },
+  });
+  if (!boutique) {
+    return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
+  }
+  if (!moisDansPeriode(cle.mois, boutique)) {
+    return NextResponse.json(
+      {
+        error: `${formatMois(cle.mois)} est en dehors de la période d'ouverture de la boutique.`,
+      },
+      { status: 400 },
+    );
+  }
+
   const frais = await prisma.fraisEnvoi.upsert({
     where: { boutiqueId_mois: cle },
     update: { montant },

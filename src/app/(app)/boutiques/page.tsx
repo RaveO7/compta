@@ -6,6 +6,12 @@ import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
 import { formatMontant } from "@/lib/format";
 import { aDesFrais, libelleFrais, paliers } from "@/lib/frais";
+import {
+  aujourdhui,
+  jour,
+  libellePeriode,
+  statutBoutique,
+} from "@/lib/periode";
 
 type Boutique = {
   id: number;
@@ -13,7 +19,8 @@ type Boutique = {
   contact: string | null;
   adresse: string | null;
   notes: string | null;
-  archivee: boolean;
+  dateDebut: string;
+  dateFin: string | null;
   loyerMensuel: number;
   commission: number;
   paliersLoyer: unknown;
@@ -22,16 +29,21 @@ type Boutique = {
 
 type PalierSaisi = { seuil: string; valeur: string };
 
-const vide = {
-  nom: "",
-  contact: "",
-  adresse: "",
-  notes: "",
-  loyerMensuel: "",
-  commission: "",
-  paliersLoyer: [] as PalierSaisi[],
-  paliersCommission: [] as PalierSaisi[],
-};
+// Formulaire vierge : ouverture le jour de la création, sans fermeture
+function formVide() {
+  return {
+    nom: "",
+    contact: "",
+    adresse: "",
+    notes: "",
+    dateDebut: aujourdhui(),
+    dateFin: "",
+    loyerMensuel: "",
+    commission: "",
+    paliersLoyer: [] as PalierSaisi[],
+    paliersCommission: [] as PalierSaisi[],
+  };
+}
 
 function versSaisie(v: unknown): PalierSaisi[] {
   return paliers(v).map((p) => ({
@@ -111,7 +123,7 @@ export default function BoutiquesPage() {
   const [chargement, setChargement] = useState(true);
   const [open, setOpen] = useState(false);
   const [edition, setEdition] = useState<Boutique | null>(null);
-  const [form, setForm] = useState(vide);
+  const [form, setForm] = useState(formVide);
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -134,7 +146,7 @@ export default function BoutiquesPage() {
 
   function ouvrirAjout() {
     setEdition(null);
-    setForm(vide);
+    setForm(formVide());
     setErreur(null);
     setOpen(true);
   }
@@ -147,6 +159,8 @@ export default function BoutiquesPage() {
       contact: b.contact ?? "",
       adresse: b.adresse ?? "",
       notes: b.notes ?? "",
+      dateDebut: jour(b.dateDebut),
+      dateFin: b.dateFin ? jour(b.dateFin) : "",
       loyerMensuel: b.loyerMensuel ? String(b.loyerMensuel) : "",
       commission: b.commission ? String(b.commission) : "",
       paliersLoyer: versSaisie(b.paliersLoyer),
@@ -158,6 +172,10 @@ export default function BoutiquesPage() {
   async function enregistrer(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nom.trim()) return;
+    if (form.dateFin && form.dateFin < form.dateDebut) {
+      setErreur("La date de fermeture doit être après la date d'ouverture.");
+      return;
+    }
     setEnregistrement(true);
     setErreur(null);
     const res = await fetch(
@@ -178,28 +196,12 @@ export default function BoutiquesPage() {
     await charger();
   }
 
-  async function archiver(b: Boutique, archivee: boolean) {
-    if (
-      archivee &&
-      !confirm(
-        `Archiver la boutique « ${b.nom} » ? Elle n'apparaîtra plus dans le suivi mensuel, mais son historique (envois, ventes, CA) est conservé. Vous pourrez la réactiver à tout moment.`,
-      )
-    )
-      return;
-    await fetch(`/api/boutiques/${b.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archivee }),
-    });
-    await charger();
-  }
-
   async function supprimer(b: Boutique) {
     if (
       !confirm(
         `Supprimer la boutique « ${b.nom} » ? Tout son suivi mensuel (envois, ventes, CA) sera définitivement supprimé.
 
-Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver ».`,
+Si la boutique a fermé, renseignez plutôt sa date de fermeture (Modifier) : son historique sera conservé.`,
       )
     )
       return;
@@ -207,14 +209,15 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
     await charger();
   }
 
-  const actives = boutiques.filter((b) => !b.archivee);
-  const archivees = boutiques.filter((b) => b.archivee);
+  const actives = boutiques.filter((b) => statutBoutique(b) !== "fermee");
+  const fermees = boutiques.filter((b) => statutBoutique(b) === "fermee");
 
   function carte(b: Boutique) {
+    const statut = statutBoutique(b);
     return (
       <div
         key={b.id}
-        className={`card p-5 flex flex-col gap-3 ${b.archivee ? "opacity-60" : ""}`}
+        className={`card p-5 flex flex-col gap-3 ${statut === "fermee" ? "opacity-60" : ""}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
@@ -230,8 +233,15 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               )}
             </div>
           </div>
+          {statut === "aVenir" && (
+            <span className="badge badge-warning shrink-0">À venir</span>
+          )}
+          {statut === "fermee" && (
+            <span className="badge badge-muted shrink-0">Fermée</span>
+          )}
         </div>
 
+        <p className="text-sm text-[var(--muted)]">{libellePeriode(b)}</p>
         {b.adresse && (
           <p className="text-sm text-[var(--muted)]">{b.adresse}</p>
         )}
@@ -253,17 +263,6 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
             onClick={() => ouvrirEdition(b)}
           >
             Modifier
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => archiver(b, !b.archivee)}
-            title={
-              b.archivee
-                ? "Remettre la boutique dans le suivi mensuel"
-                : "Retirer la boutique du suivi mensuel sans perdre son historique"
-            }
-          >
-            {b.archivee ? "Réactiver" : "Archiver"}
           </button>
           <button
             className="btn btn-danger btn-sm"
@@ -291,7 +290,7 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
 
       {chargement ? (
         <p className="text-[var(--muted)]">Chargement…</p>
-      ) : actives.length === 0 && archivees.length === 0 ? (
+      ) : boutiques.length === 0 ? (
         <EmptyState
           titre="Aucune boutique"
           description="Ajoutez votre première boutique pour commencer le suivi."
@@ -308,20 +307,22 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               {actives.map(carte)}
             </div>
           ) : (
-            <p className="text-[var(--muted)]">Aucune boutique active.</p>
+            <p className="text-[var(--muted)]">Aucune boutique ouverte.</p>
           )}
 
-          {archivees.length > 0 && (
+          {fermees.length > 0 && (
             <details className="mt-8">
               <summary className="cursor-pointer font-semibold mb-1">
-                Boutiques archivées ({archivees.length})
+                Boutiques fermées ({fermees.length})
               </summary>
               <p className="text-sm text-[var(--muted)] mb-4">
-                Plus proposées dans le suivi mensuel. Leur historique reste
-                comptabilisé dans le tableau de bord et le stock.
+                Leur date de fermeture est passée. Leur historique reste
+                consultable dans le suivi mensuel et comptabilisé dans le
+                tableau de bord et le stock. Pour en rouvrir une, retirez ou
+                repoussez sa date de fermeture.
               </p>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {archivees.map(carte)}
+                {fermees.map(carte)}
               </div>
             </details>
           )}
@@ -362,6 +363,66 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
               placeholder="Adresse de la boutique"
             />
           </div>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="label">Période d&apos;activité</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  className="text-xs text-[var(--muted)]"
+                  htmlFor="date-debut"
+                >
+                  Ouverture *
+                </label>
+                <input
+                  id="date-debut"
+                  className="input"
+                  type="date"
+                  required
+                  value={form.dateDebut}
+                  onChange={(e) =>
+                    setForm({ ...form, dateDebut: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label
+                  className="text-xs text-[var(--muted)]"
+                  htmlFor="date-fin"
+                >
+                  Fermeture
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="date-fin"
+                    className="input"
+                    type="date"
+                    min={form.dateDebut || undefined}
+                    value={form.dateFin}
+                    onChange={(e) =>
+                      setForm({ ...form, dateFin: e.target.value })
+                    }
+                  />
+                  {form.dateFin && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      aria-label="Retirer la date de fermeture"
+                      title="Retirer la date de fermeture"
+                      onClick={() => setForm({ ...form, dateFin: "" })}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Le suivi mensuel n&apos;est possible qu&apos;entre ces deux
+              dates. L&apos;ouverture est par défaut aujourd&apos;hui :
+              avancez-la ou reculez-la si besoin. Laissez la fermeture vide
+              tant que la boutique est ouverte.
+            </p>
+          </fieldset>
           <fieldset className="flex flex-col gap-4">
             <legend className="label">Frais de la boutique</legend>
             <div>
@@ -455,7 +516,7 @@ Pour la retirer du suivi en gardant son historique, utilisez plutôt « Archiver
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={enregistrement || !form.nom.trim()}
+              disabled={enregistrement || !form.nom.trim() || !form.dateDebut}
             >
               {enregistrement ? "Enregistrement…" : "Enregistrer"}
             </button>

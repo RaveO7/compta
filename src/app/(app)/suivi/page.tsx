@@ -17,11 +17,18 @@ import {
   montantLoyer,
   paliers,
 } from "@/lib/frais";
+import {
+  bornerMois,
+  bornesMois,
+  libellePeriode,
+  statutBoutique,
+} from "@/lib/periode";
 
 type Boutique = {
   id: number;
   nom: string;
-  archivee: boolean;
+  dateDebut: string;
+  dateFin: string | null;
   loyerMensuel: number;
   commission: number;
   paliersLoyer: unknown;
@@ -108,6 +115,8 @@ export default function SuiviPage() {
   const [boutiques, setBoutiques] = useState<Boutique[]>([]);
   const [boutiqueId, setBoutiqueId] = useState<number | null>(null);
   const [mois, setMois] = useState(moisActuel());
+  // Valeur du champ mois, distincte de `mois` pendant la frappe d'une année
+  const [saisieMois, setSaisieMois] = useState(mois);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [chargement, setChargement] = useState(true);
   // Articles dont la saisie n'est pas encore enregistrée (pour l'affichage)
@@ -137,14 +146,24 @@ export default function SuiviPage() {
   const relancerRef = useRef(false);
 
   useEffect(() => {
-    // Toutes les boutiques (archivées incluses, pour consulter l'historique),
-    // mais on démarre sur une boutique active.
+    // Toutes les boutiques (fermées incluses, pour consulter l'historique),
+    // mais on démarre sur une boutique ouverte, au mois courant si possible.
     fetch("/api/boutiques?toutes=1")
       .then((r) => r.json())
       .then((b: Boutique[]) => {
         setBoutiques(b);
-        if (b.length > 0) setBoutiqueId((b.find((x) => !x.archivee) ?? b[0]).id);
-        else setChargement(false);
+        if (b.length === 0) {
+          setChargement(false);
+          return;
+        }
+        const depart =
+          b.find((x) => statutBoutique(x) === "ouverte") ??
+          b.find((x) => statutBoutique(x) === "aVenir") ??
+          b[0];
+        const m = bornerMois(moisActuel(), depart);
+        setBoutiqueId(depart.id);
+        setMois(m);
+        setSaisieMois(m);
       });
   }, []);
 
@@ -331,13 +350,20 @@ export default function SuiviPage() {
     return () => document.removeEventListener("click", surClic, true);
   }, [aDesModifs, sauvegarder]);
 
-  // Changer de boutique / de mois : on enregistre d'abord la saisie en cours
+  // Changer de boutique / de mois : on enregistre d'abord la saisie en cours.
+  // Le mois est ramené dans la période d'ouverture de la boutique choisie.
   async function changerSelection(nouvelle: Partial<Selection>) {
+    const cibleId = nouvelle.boutiqueId ?? boutiqueId;
+    const cibleBoutique = boutiques.find((b) => b.id === cibleId);
+    const moisVoulu = nouvelle.mois ?? mois;
     const cible = {
-      boutiqueId: nouvelle.boutiqueId ?? boutiqueId,
-      mois: nouvelle.mois ?? mois,
+      boutiqueId: cibleId,
+      mois: cibleBoutique ? bornerMois(moisVoulu, cibleBoutique) : moisVoulu,
     };
-    if (cible.boutiqueId === boutiqueId && cible.mois === mois) return;
+    if (cible.boutiqueId === boutiqueId && cible.mois === mois) {
+      setSaisieMois(mois);
+      return;
+    }
     await sauvegarder();
     if (
       modifsRef.current.size > 0 &&
@@ -345,12 +371,14 @@ export default function SuiviPage() {
         "Certaines modifications n'ont pas pu être enregistrées et seront perdues. Continuer ?",
       )
     ) {
+      setSaisieMois(mois);
       return;
     }
     // Les lignes se rechargent via l'effet sur boutiqueId / mois
     setChargement(true);
     setBoutiqueId(cible.boutiqueId);
     setMois(cible.mois);
+    setSaisieMois(cible.mois);
   }
 
   const etat: EtatSauvegarde = enCours
@@ -369,6 +397,8 @@ export default function SuiviPage() {
     0,
   );
   const boutique = boutiques.find((b) => b.id === boutiqueId);
+  // Mois de suivi possibles : de l'ouverture à la fermeture de la boutique
+  const bornes = boutique ? bornesMois(boutique) : null;
   const loyer = boutique ? montantLoyer(totalCA, boutique) : 0;
   const commission = boutique ? montantCommission(totalCA, boutique) : 0;
   // Libellé de la commission : taux unique, ou "Commission" si calcul par tranches
@@ -432,6 +462,7 @@ export default function SuiviPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => changerSelection({ mois: moisPrecedent(mois) })}
+              disabled={!!bornes && mois <= bornes.min}
               aria-label="Mois précédent"
             >
               ‹
@@ -439,15 +470,21 @@ export default function SuiviPage() {
             <input
               type="month"
               className="input w-[170px]"
-              value={mois}
+              value={saisieMois}
+              min={bornes?.min}
+              max={bornes?.max ?? undefined}
               onChange={(e) => {
-                const m = e.target.value || moisActuel();
-                changerSelection({ mois: m });
+                const m = e.target.value;
+                setSaisieMois(m);
+                // Année en cours de frappe (ex. 0002) : on attend qu'elle soit complète
+                if (/^[1-9]\d{3}-\d{2}$/.test(m)) changerSelection({ mois: m });
               }}
+              onBlur={() => setSaisieMois(mois)}
             />
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => changerSelection({ mois: moisSuivant(mois) })}
+              disabled={!!bornes?.max && mois >= bornes.max}
               aria-label="Mois suivant"
             >
               ›
@@ -578,10 +615,8 @@ export default function SuiviPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <p className="text-sm text-[var(--muted)]">
-          {formatMois(mois)} —{" "}
-          {boutique?.nom}
-          {boutique?.archivee &&
-            " (boutique archivée)"}
+          {formatMois(mois)} — {boutique?.nom}
+          {boutique && ` · ${libellePeriode(boutique)}`}
         </p>
         <input
           type="search"

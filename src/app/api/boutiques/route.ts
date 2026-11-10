@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { lireFrais, lirePaliers } from "@/lib/frais";
+import { aujourdhui, lireDate, lirePeriode } from "@/lib/periode";
 
-// Par défaut : boutiques actives uniquement. `?toutes=1` inclut les archivées.
+// Par défaut : boutiques non fermées (ouvertes ou à venir).
+// `?toutes=1` inclut les boutiques fermées (date de fin passée).
 export async function GET(request: Request) {
   const toutes = new URL(request.url).searchParams.get("toutes") === "1";
   const boutiques = await prisma.boutique.findMany({
-    where: toutes ? undefined : { archivee: false },
-    orderBy: [{ archivee: "asc" }, { nom: "asc" }],
+    where: toutes
+      ? undefined
+      : { OR: [{ dateFin: null }, { dateFin: { gte: lireDate(aujourdhui())! } }] },
+    orderBy: { nom: "asc" },
   });
   return NextResponse.json(boutiques);
 }
@@ -34,8 +38,13 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  const periode = lirePeriode(body);
+  if ("erreur" in periode) {
+    return NextResponse.json({ error: periode.erreur }, { status: 400 });
+  }
   const boutique = await prisma.boutique.create({
     data: {
+      ...periode,
       loyerMensuel,
       commission,
       paliersLoyer,

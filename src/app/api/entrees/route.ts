@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { formatMois } from "@/lib/format";
+import { moisDansPeriode } from "@/lib/periode";
 
 // Renvoie, pour un mois et une boutique donnés, la liste de tous les articles
 // avec la saisie (envoyé / vendu / prix) existante le cas échéant.
@@ -101,6 +103,23 @@ export async function POST(request: Request) {
       .delete({ where: { boutiqueId_articleId_mois: { boutiqueId, articleId, mois } } })
       .catch(() => null);
     return NextResponse.json({ ok: true, supprime: true });
+  }
+
+  // Pas de saisie hors de la période d'ouverture de la boutique
+  const boutique = await prisma.boutique.findUnique({
+    where: { id: boutiqueId },
+    select: { dateDebut: true, dateFin: true },
+  });
+  if (!boutique) {
+    return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
+  }
+  if (!moisDansPeriode(mois, boutique)) {
+    return NextResponse.json(
+      {
+        error: `${formatMois(mois)} est en dehors de la période d'ouverture de la boutique.`,
+      },
+      { status: 400 },
+    );
   }
 
   const entree = await prisma.entree.upsert({

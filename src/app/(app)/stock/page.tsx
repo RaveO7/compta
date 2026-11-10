@@ -6,7 +6,12 @@ import EmptyState from "@/components/EmptyState";
 import OptionsBoutiques from "@/components/OptionsBoutiques";
 import { formatMontant, formatMoisCourt } from "@/lib/format";
 
-type Boutique = { id: number; nom: string; archivee: boolean };
+type Boutique = {
+  id: number;
+  nom: string;
+  dateDebut: string;
+  dateFin: string | null;
+};
 type Cellule = { envoye: number; vendu: number };
 type Ligne = {
   articleId: number;
@@ -32,7 +37,7 @@ type LigneMatrice = {
   total: number;
 };
 type Matrice = {
-  boutiques: Boutique[];
+  boutiques: { id: number; nom: string; fermee: boolean }[];
   lignes: LigneMatrice[];
   totauxParBoutique: Record<number, number>;
   totalGeneral: number;
@@ -189,9 +194,9 @@ export default function StockPage() {
                           className="text-center border-l border-[var(--border)]"
                         >
                           {b.nom}
-                          {b.archivee && (
+                          {b.fermee && (
                             <span className="block text-xs font-normal text-[var(--muted)]">
-                              archivée
+                              fermée
                             </span>
                           )}
                         </th>

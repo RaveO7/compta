@@ -28,15 +28,17 @@ async function main() {
   await prisma.article.deleteMany();
   await prisma.boutique.deleteMany();
 
+  // Ouvertes au début de la période de suivi générée ci-dessous (6 derniers mois)
+  const dateDebut = new Date(`${moisIlYA(5)}-01T00:00:00Z`);
   const boutiques = await Promise.all([
     prisma.boutique.create({
-      data: { nom: "Boutique du Centre", contact: "Marie · 06 12 34 56 78", adresse: "12 rue de la Paix, Lyon" },
+      data: { dateDebut, nom: "Boutique du Centre", contact: "Marie · 06 12 34 56 78", adresse: "12 rue de la Paix, Lyon" },
     }),
     prisma.boutique.create({
-      data: { nom: "Concept Store Nord", contact: "Julien · contact@conceptnord.fr", adresse: "5 avenue Foch, Lille" },
+      data: { dateDebut, nom: "Concept Store Nord", contact: "Julien · contact@conceptnord.fr", adresse: "5 avenue Foch, Lille" },
     }),
     prisma.boutique.create({
-      data: { nom: "Marché des Créateurs", contact: "Stand 14", adresse: "Place Bellecour, Lyon" },
+      data: { dateDebut, nom: "Marché des Créateurs", contact: "Stand 14", adresse: "Place Bellecour, Lyon" },
     }),
   ]);
 
