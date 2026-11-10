@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { aujourdhui, lireDate } from "@/lib/periode";
-import { stockDe, stockParArticle } from "@/lib/stock-maison";
+import {
+  lireCorps,
+  lireEntier,
+  stockDe,
+  stockParArticle,
+} from "@/lib/stock-maison";
 
 // Inventaire : pour chaque article compté, enregistre l'écart entre la quantité
 // réellement présente à la maison et le stock calculé. Le stock calculé est
@@ -9,7 +14,10 @@ import { stockDe, stockParArticle } from "@/lib/stock-maison";
 // ouverte depuis longtemps.
 // body : { date?: "YYYY-MM-DD", comptes: [{ articleId, quantite }] }
 export async function POST(request: Request) {
-  const body = await request.json();
+  const body = await lireCorps(request);
+  if (!body) {
+    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+  }
   const date = lireDate(body.date || aujourdhui());
   if (!date) {
     return NextResponse.json({ error: "Date invalide." }, { status: 400 });
@@ -23,11 +31,11 @@ export async function POST(request: Request) {
 
   const comptes = new Map<number, number>();
   for (const c of body.comptes) {
-    const articleId = Number(c?.articleId);
-    const quantite = Number(c?.quantite);
+    const articleId = lireEntier(c?.articleId);
+    const quantite = lireEntier(c?.quantite);
     if (
-      !Number.isInteger(articleId) ||
-      !Number.isInteger(quantite) ||
+      articleId === null ||
+      quantite === null ||
       quantite < 0 ||
       quantite > 100000
     ) {

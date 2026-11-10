@@ -580,13 +580,17 @@ export default function MaisonPage() {
                         <>
                           <td className="text-center">
                             <input
-                              className="input w-24 text-center tabular-nums"
+                              // Largeur en style : .input (hors layer) impose 100 %
+                              style={{ width: "6rem" }}
+                              className="input text-center tabular-nums"
                               type="number"
                               min="0"
                               step="1"
                               inputMode="numeric"
                               value={saisie}
-                              placeholder={String(Math.max(0, l.maison))}
+                              // Stock calculé en indice, sauf s'il est nul ou négatif
+                              // (un « 0 » grisé passerait pour une saisie)
+                              placeholder={l.maison > 0 ? String(l.maison) : ""}
                               onChange={(e) =>
                                 setComptes({
                                   ...comptes,

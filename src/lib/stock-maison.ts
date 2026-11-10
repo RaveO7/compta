@@ -15,6 +15,23 @@ export type StockArticle = {
   enBoutique: number; // reste en boutique (envoyé − vendu)
 };
 
+// Entier saisi (nombre, ou texte non vide), null sinon. Number() seul lirait
+// "" et null comme 0, et true comme 1.
+export function lireEntier(valeur: unknown): number | null {
+  if (typeof valeur === "string" ? valeur.trim() === "" : typeof valeur !== "number")
+    return null;
+  const n = Number(valeur);
+  return Number.isInteger(n) ? n : null;
+}
+
+// Corps JSON d'une requête, null s'il est absent ou mal formé
+export async function lireCorps(
+  request: Request,
+): Promise<Record<string, unknown> | null> {
+  const body = await request.json().catch(() => null);
+  return body && typeof body === "object" && !Array.isArray(body) ? body : null;
+}
+
 function vide(): StockArticle {
   return {
     fabrique: 0,
